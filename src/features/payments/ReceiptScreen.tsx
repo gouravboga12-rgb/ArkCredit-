@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
-import { Download, Share2, CheckCircle2, ArrowLeft, Printer } from 'lucide-react';
+import { Download, CheckCircle2, ArrowLeft, Printer } from 'lucide-react';
 import { useStore } from '../../store';
 import { Payment } from '../../core/types';
 import { formatCurrency, formatDisplayDate, maskAccount } from '../../core/formatters';
 import { AkrLogo } from '../../assets/logo';
-import { PageHeader, GoldButton, OutlineGoldButton, StatusBadge } from '../../components/ui';
+import { PageHeader, GoldButton, StatusBadge } from '../../components/ui';
 
 export const ReceiptScreen: React.FC = () => {
   const { paymentId } = useParams<{ paymentId: string }>();
@@ -102,18 +102,6 @@ export const ReceiptScreen: React.FC = () => {
     }
   };
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: 'AKR Credit Capital Receipt',
-        text: `Payment Receipt for ${formatCurrency(payment.amount)} - Ref: ${payment.transactionRef}`,
-        url: window.location.href,
-      }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Receipt link copied to clipboard!');
-    }
-  };
 
   return (
     <div className="flex-1 flex flex-col justify-between bg-akr-bg text-white pb-6 relative overflow-y-auto">
@@ -206,14 +194,10 @@ export const ReceiptScreen: React.FC = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="mt-5 space-y-3">
+          <div className="mt-5">
             <GoldButton onClick={handleDownloadPdf} icon={<Download className="w-4 h-4" />}>
               Download PDF Receipt
             </GoldButton>
-
-            <OutlineGoldButton onClick={handleShare} icon={<Share2 className="w-4 h-4" />}>
-              Share Receipt
-            </OutlineGoldButton>
           </div>
         </div>
       </div>
