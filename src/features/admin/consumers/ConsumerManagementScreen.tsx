@@ -477,7 +477,7 @@ export const ConsumerManagementScreen: React.FC = () => {
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto rounded-2xl border border-zinc-800 bg-[#121214] shadow-sm">
+          <div className="hidden lg:block overflow-x-auto rounded-2xl border border-zinc-800 bg-[#121214] shadow-sm">
             <table className="w-full text-left text-xs text-zinc-200">
               <thead className="bg-[#18181B] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800 select-none">
                 <tr>
@@ -644,8 +644,8 @@ export const ConsumerManagementScreen: React.FC = () => {
             </table>
           </div>
 
-          {/* Mobile Stacked Cards View (Responsive design) */}
-          <div className="md:hidden space-y-3">
+          {/* Mobile & Tablet Stacked Cards View (Responsive design) */}
+          <div className="lg:hidden space-y-3">
             {filtered.map((c) => (
               <div
                 key={c.id}

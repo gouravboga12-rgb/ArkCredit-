@@ -331,7 +331,8 @@ export const DashboardScreen: React.FC = () => {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead className="bg-[#1B1B1F] text-zinc-400 uppercase tracking-wider text-[10px]">
               <tr>
@@ -369,6 +370,39 @@ export const DashboardScreen: React.FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile & Tablet Card View */}
+        <div className="lg:hidden space-y-2.5">
+          {upcomingPlans.map((p) => {
+            const consumer = consumers.find((c) => c.id === p.consumerId);
+            return (
+              <div
+                key={p.id}
+                className="p-3.5 rounded-xl bg-[#18181D] border border-zinc-800/80 space-y-2 text-left"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">{consumer?.name || 'Customer'}</h4>
+                    <span className="text-[10px] font-mono text-zinc-400">{consumer?.accountNumber}</span>
+                  </div>
+                  <StatusBadge status="Due Soon" size="sm" />
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-xs">
+                  <div>
+                    <span className="text-zinc-300 font-medium block">{p.title}</span>
+                    <span className="text-[10px] text-zinc-400">Due: {formatDisplayDate(p.nextEmiDate)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-akr-gold text-sm block">
+                      {formatCurrency(p.emiAmount)}
+                    </span>
+                    <span className="text-[10px] text-zinc-500">EMI</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -457,80 +457,165 @@ export const DuesManagementScreen: React.FC = () => {
           <Skeleton className="h-12 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="rounded-2xl bg-[#141417] border border-zinc-800 shadow-card-dark overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-[#1B1B1F] text-zinc-400 uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3 px-4">Plan Title & Reference</th>
-                  <th className="py-3 px-4">Consumer</th>
-                  <th className="py-3 px-4">Outstanding</th>
-                  <th className="py-3 px-4">Breakdown (P + I + Fee)</th>
-                  <th className="py-3 px-4">EMI Amount</th>
-                  <th className="py-3 px-4">Next Due Date</th>
-                  <th className="py-3 px-4">EMIs Left</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/80">
-                {filteredPlans.map((p) => {
-                  const consumer = consumers.find((c) => c.id === p.consumerId);
-                  return (
-                    <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-white">{p.title}</div>
-                        <div className="text-[10px] font-mono text-zinc-400">{p.referenceNumber}</div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-zinc-200">{consumer?.name || '-'}</div>
-                        <div className="text-[10px] font-mono text-zinc-500">{consumer?.accountNumber}</div>
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-akr-gold text-sm">
-                        {formatCurrency(p.outstandingAmount)}
-                      </td>
-                      <td className="py-3.5 px-4 text-zinc-300 font-mono text-[11px]">
-                        ₹{p.principal.toLocaleString('en-IN')} + ₹{p.interest.toLocaleString('en-IN')} + ₹{p.processingFee.toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-white">
-                        {p.emiAmount > 0 ? formatCurrency(p.emiAmount) : 'None'}
-                      </td>
-                      <td className="py-3.5 px-4 text-zinc-300">
-                        {p.nextEmiDate ? formatDisplayDate(p.nextEmiDate) : 'N/A'}
-                      </td>
-                      <td className="py-3.5 px-4 text-zinc-300">
-                        {p.remainingEmis} / {p.totalEmis}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <StatusBadge status={p.status === 'active' ? 'Active' : 'Closed'} size="sm" />
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => openEditPlan(p)}
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-akr-gold hover:bg-zinc-800"
-                            title="Edit Plan"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          {isSuperAdmin && (
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block rounded-2xl bg-[#141417] border border-zinc-800 shadow-card-dark overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#1B1B1F] text-zinc-400 uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-3 px-4">Plan Title & Reference</th>
+                    <th className="py-3 px-4">Consumer</th>
+                    <th className="py-3 px-4">Outstanding</th>
+                    <th className="py-3 px-4">Breakdown (P + I + Fee)</th>
+                    <th className="py-3 px-4">EMI Amount</th>
+                    <th className="py-3 px-4">Next Due Date</th>
+                    <th className="py-3 px-4">EMIs Left</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80">
+                  {filteredPlans.map((p) => {
+                    const consumer = consumers.find((c) => c.id === p.consumerId);
+                    return (
+                      <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-white">{p.title}</div>
+                          <div className="text-[10px] font-mono text-zinc-400">{p.referenceNumber}</div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-zinc-200">{consumer?.name || '-'}</div>
+                          <div className="text-[10px] font-mono text-zinc-500">{consumer?.accountNumber}</div>
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-akr-gold text-sm">
+                          {formatCurrency(p.outstandingAmount)}
+                        </td>
+                        <td className="py-3.5 px-4 text-zinc-300 font-mono text-[11px]">
+                          ₹{p.principal.toLocaleString('en-IN')} + ₹{p.interest.toLocaleString('en-IN')} + ₹{p.processingFee.toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-white">
+                          {p.emiAmount > 0 ? formatCurrency(p.emiAmount) : 'None'}
+                        </td>
+                        <td className="py-3.5 px-4 text-zinc-300">
+                          {p.nextEmiDate ? formatDisplayDate(p.nextEmiDate) : 'N/A'}
+                        </td>
+                        <td className="py-3.5 px-4 text-zinc-300">
+                          {p.remainingEmis} / {p.totalEmis}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <StatusBadge status={p.status === 'active' ? 'Active' : 'Closed'} size="sm" />
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => handleDeletePlan(p.id, p.title)}
-                              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800"
-                              title="Delete Plan (Super Admin)"
+                              onClick={() => openEditPlan(p)}
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-akr-gold hover:bg-zinc-800"
+                              title="Edit Plan"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            {isSuperAdmin && (
+                              <button
+                                onClick={() => handleDeletePlan(p.id, p.title)}
+                                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800"
+                                title="Delete Plan (Super Admin)"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile & Tablet Card View */}
+          <div className="lg:hidden space-y-3">
+            {filteredPlans.map((p) => {
+              const consumer = consumers.find((c) => c.id === p.consumerId);
+              return (
+                <div
+                  key={p.id}
+                  className="p-4 rounded-2xl bg-[#141417] border border-zinc-800/80 shadow-card-dark space-y-3 text-left"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">{p.title}</h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
+                          {p.referenceNumber}
+                        </span>
+                        <span className="text-xs font-semibold text-zinc-300">
+                          {consumer?.name || 'Customer'}
+                        </span>
+                      </div>
+                    </div>
+                    <StatusBadge status={p.status === 'active' ? 'Active' : 'Closed'} size="sm" />
+                  </div>
+
+                  {/* Financial Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">Outstanding</span>
+                      <span className="font-bold text-akr-gold text-sm">{formatCurrency(p.outstandingAmount)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">EMI Amount</span>
+                      <span className="font-bold text-white">
+                        {p.emiAmount > 0 ? formatCurrency(p.emiAmount) : 'None'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">Next Due Date</span>
+                      <span className="text-zinc-300">
+                        {p.nextEmiDate ? formatDisplayDate(p.nextEmiDate) : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">EMIs Left</span>
+                      <span className="text-zinc-300 font-mono">
+                        {p.remainingEmis} / {p.totalEmis}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Principal Breakdown */}
+                  <div className="p-2.5 rounded-xl bg-[#18181D] border border-zinc-800/80 text-[11px] font-mono flex items-center justify-between text-zinc-400">
+                    <span>Breakdown:</span>
+                    <span className="text-zinc-300">
+                      ₹{p.principal.toLocaleString('en-IN')} (P) + ₹{p.interest.toLocaleString('en-IN')} (I) + ₹{p.processingFee.toLocaleString('en-IN')} (Fee)
+                    </span>
+                  </div>
+
+                  {/* Action Controls */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                    <button
+                      onClick={() => openEditPlan(p)}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    >
+                      <Edit className="w-3.5 h-3.5 text-akr-gold" />
+                      <span>Edit Plan</span>
+                    </button>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => handleDeletePlan(p.id, p.title)}
+                        className="px-3 py-1.5 rounded-lg bg-red-950/30 hover:bg-red-950/60 text-red-400 border border-red-900/40 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Add / Edit Dues Plan Modal */}

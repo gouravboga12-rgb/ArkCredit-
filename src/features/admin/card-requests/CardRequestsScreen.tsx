@@ -382,175 +382,318 @@ export const CardRequestsScreen: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-[#121214] shadow-sm">
-          <table className="w-full text-left text-xs text-zinc-200">
-            <thead className="bg-[#18181B] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800 select-none">
-              <tr>
-                <th className="py-3 px-4">Ref & Date (IST)</th>
-                <th className="py-3 px-4">Applicant & Contact</th>
-                <th className="py-3 px-4">Card Requested</th>
-                <th className="py-3 px-4">PAN & Aadhaar</th>
-                <th className="py-3 px-4">Uploaded PAN</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Admin Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/60 font-sans">
-              {filteredRequests.map((r) => {
-                const isPending = r.status === 'pending';
-                const isApproved = r.status === 'approved';
-                const isRejected = r.status === 'rejected';
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto rounded-2xl border border-zinc-800 bg-[#121214] shadow-sm">
+            <table className="w-full text-left text-xs text-zinc-200">
+              <thead className="bg-[#18181B] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800 select-none">
+                <tr>
+                  <th className="py-3 px-4">Ref & Date (IST)</th>
+                  <th className="py-3 px-4">Applicant & Contact</th>
+                  <th className="py-3 px-4">Card Requested</th>
+                  <th className="py-3 px-4">PAN & Aadhaar</th>
+                  <th className="py-3 px-4">Uploaded PAN</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Admin Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60 font-sans">
+                {filteredRequests.map((r) => {
+                  const isPending = r.status === 'pending';
+                  const isApproved = r.status === 'approved';
+                  const isRejected = r.status === 'rejected';
 
-                return (
-                  <tr key={r.id} className="hover:bg-zinc-800/30 transition-colors">
-                    {/* Ref & Date in IST */}
-                    <td className="py-3.5 px-4">
-                      <span className="font-mono font-bold text-white block">{r.referenceNumber}</span>
-                      <span className="text-[11px] text-akr-gold font-mono block mt-0.5">
-                        {formatDateTimeIST(r.createdAt)}
-                      </span>
-                    </td>
+                  return (
+                    <tr key={r.id} className="hover:bg-zinc-800/30 transition-colors">
+                      {/* Ref & Date in IST */}
+                      <td className="py-3.5 px-4">
+                        <span className="font-mono font-bold text-white block">{r.referenceNumber}</span>
+                        <span className="text-[11px] text-akr-gold font-mono block mt-0.5">
+                          {formatDateTimeIST(r.createdAt)}
+                        </span>
+                      </td>
 
-                    {/* Applicant & Contact */}
-                    <td className="py-3.5 px-4 font-bold text-white">
+                      {/* Applicant & Contact */}
+                      <td className="py-3.5 px-4 font-bold text-white">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-akr-gold/15 text-akr-gold font-bold flex items-center justify-center text-xs">
+                            {r.fullName.charAt(0)}
+                          </div>
+                          <div>
+                            <span>{r.fullName}</span>
+                            <span className="block text-[11px] font-mono text-zinc-400 font-normal">
+                              {r.phone}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Card Requested */}
+                      <td className="py-3.5 px-4">
+                        <span className="font-semibold text-white block">{r.cardTypeName}</span>
+                        {r.monthlyIncome && (
+                          <span className="text-[10px] text-zinc-400 block">
+                            Income: {formatCurrency(r.monthlyIncome)}/mo
+                          </span>
+                        )}
+                      </td>
+
+                      {/* PAN & Aadhaar */}
+                      <td className="py-3.5 px-4 font-mono text-zinc-300">
+                        <div>
+                          <span className="text-[10px] text-zinc-500 uppercase mr-1">PAN:</span>
+                          <strong className="text-white">{r.panNumber}</strong>
+                        </div>
+                        <div className="text-[11px] text-zinc-400 mt-0.5">
+                          <span className="text-[10px] text-zinc-500 uppercase mr-1">Aadhaar:</span>
+                          <span>{r.aadharNumber}</span>
+                        </div>
+                      </td>
+
+                      {/* Uploaded PAN Document */}
+                      <td className="py-3.5 px-4">
+                        {r.panDocName ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDocUrl({
+                                name: r.panDocName || 'PAN_Document',
+                                url: r.panDocData || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-akr-gold text-[11px] font-medium border border-zinc-700 transition-colors cursor-pointer"
+                            title="Click to view uploaded PAN document"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="max-w-[120px] truncate">{r.panDocName}</span>
+                            <ExternalLink className="w-3 h-3 text-zinc-400" />
+                          </button>
+                        ) : (
+                          <span className="text-zinc-500 text-[11px]">Not Attached</span>
+                        )}
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="py-3.5 px-4">
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-amber-300 uppercase bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                            <Clock className="w-3 h-3" />
+                            <span>Pending</span>
+                          </span>
+                        )}
+                        {isApproved && (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-emerald-400 uppercase bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                              <CheckCircle className="w-3 h-3" />
+                              <span>Approved</span>
+                            </span>
+                            {r.creditLimitApproved && (
+                              <span className="block text-[10px] text-zinc-400 mt-0.5 font-mono">
+                                Limit: {formatCurrency(r.creditLimitApproved)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {isRejected && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-red-400 uppercase bg-red-500/10 px-2.5 py-0.5 rounded-full border border-red-500/30">
+                            <XCircle className="w-3 h-3" />
+                            <span>Rejected</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setViewingRequest(r)}
+                            className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-colors flex items-center gap-1"
+                            title="View Full Application Details"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View</span>
+                          </button>
+
+                          {isPending && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setApprovingRequest(r);
+                                  setCreditLimit(150000);
+                                  setAdminRemarks(`Approved for ${r.cardTypeName}. KYC verified.`);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                                title="Approve & Initiate Card"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Approve</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRejectingRequest(r);
+                                  setAdminRemarks('Does not meet current credit underwriting guidelines.');
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 text-xs font-semibold border border-red-800/60 transition-colors"
+                                title="Reject Application"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Reject</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile & Tablet Card View */}
+          <div className="lg:hidden space-y-3">
+            {filteredRequests.map((r) => {
+              const isPending = r.status === 'pending';
+              const isApproved = r.status === 'approved';
+              const isRejected = r.status === 'rejected';
+
+              return (
+                <div
+                  key={r.id}
+                  className="p-4 rounded-2xl bg-[#141417] border border-zinc-800/80 shadow-card-dark space-y-3 text-left"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-akr-gold/15 text-akr-gold font-bold flex items-center justify-center text-xs">
+                        <div className="w-8 h-8 rounded-full bg-akr-gold/15 text-akr-gold font-bold flex items-center justify-center text-xs">
                           {r.fullName.charAt(0)}
                         </div>
                         <div>
-                          <span>{r.fullName}</span>
-                          <span className="block text-[11px] font-mono text-zinc-400 font-normal">
-                            {r.phone}
-                          </span>
+                          <h4 className="text-sm font-bold text-white">{r.fullName}</h4>
+                          <span className="text-[10px] font-mono text-zinc-400 block">{r.phone}</span>
                         </div>
                       </div>
-                    </td>
+                    </div>
 
-                    {/* Card Requested */}
-                    <td className="py-3.5 px-4">
-                      <span className="font-semibold text-white block">{r.cardTypeName}</span>
-                      {r.monthlyIncome && (
-                        <span className="text-[10px] text-zinc-400 block">
-                          Income: {formatCurrency(r.monthlyIncome)}/mo
-                        </span>
-                      )}
-                    </td>
-
-                    {/* PAN & Aadhaar */}
-                    <td className="py-3.5 px-4 font-mono text-zinc-300">
-                      <div>
-                        <span className="text-[10px] text-zinc-500 uppercase mr-1">PAN:</span>
-                        <strong className="text-white">{r.panNumber}</strong>
-                      </div>
-                      <div className="text-[11px] text-zinc-400 mt-0.5">
-                        <span className="text-[10px] text-zinc-500 uppercase mr-1">Aadhaar:</span>
-                        <span>{r.aadharNumber}</span>
-                      </div>
-                    </td>
-
-                    {/* Uploaded PAN Document */}
-                    <td className="py-3.5 px-4">
-                      {r.panDocName ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPreviewDocUrl({
-                              name: r.panDocName || 'PAN_Document',
-                              url: r.panDocData || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
-                            })
-                          }
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-akr-gold text-[11px] font-medium border border-zinc-700 transition-colors cursor-pointer"
-                          title="Click to view uploaded PAN document"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span className="max-w-[120px] truncate">{r.panDocName}</span>
-                          <ExternalLink className="w-3 h-3 text-zinc-400" />
-                        </button>
-                      ) : (
-                        <span className="text-zinc-500 text-[11px]">Not Attached</span>
-                      )}
-                    </td>
-
-                    {/* Status Badge */}
-                    <td className="py-3.5 px-4">
+                    <div>
                       {isPending && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-amber-300 uppercase bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider text-amber-300 uppercase bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
                           <Clock className="w-3 h-3" />
                           <span>Pending</span>
                         </span>
                       )}
                       {isApproved && (
-                        <div>
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-emerald-400 uppercase bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                            <CheckCircle className="w-3 h-3" />
-                            <span>Approved</span>
-                          </span>
-                          {r.creditLimitApproved && (
-                            <span className="block text-[10px] text-zinc-400 mt-0.5 font-mono">
-                              Limit: {formatCurrency(r.creditLimitApproved)}
-                            </span>
-                          )}
-                        </div>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Approved</span>
+                        </span>
                       )}
                       {isRejected && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-red-400 uppercase bg-red-500/10 px-2.5 py-0.5 rounded-full border border-red-500/30">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider text-red-400 uppercase bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/30">
                           <XCircle className="w-3 h-3" />
                           <span>Rejected</span>
                         </span>
                       )}
-                    </td>
+                    </div>
+                  </div>
 
-                    {/* Actions */}
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                  {/* Ref & Date Banner */}
+                  <div className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl bg-[#18181D] border border-zinc-800">
+                    <span className="font-mono text-zinc-300 font-semibold">{r.referenceNumber}</span>
+                    <span className="text-[10px] text-akr-gold font-mono">{formatDateTimeIST(r.createdAt)}</span>
+                  </div>
+
+                  {/* Card & KYC Row */}
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">Card Requested</span>
+                      <span className="font-bold text-white text-xs block">{r.cardTypeName}</span>
+                      {r.monthlyIncome && (
+                        <span className="text-[10px] text-zinc-400">
+                          Inc: {formatCurrency(r.monthlyIncome)}/mo
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">PAN / Aadhaar</span>
+                      <span className="font-mono font-bold text-zinc-200 block">{r.panNumber}</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">{r.aadharNumber}</span>
+                    </div>
+                  </div>
+
+                  {/* PAN Document Button */}
+                  {r.panDocName && (
+                    <div className="pt-2 border-t border-zinc-800/80">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewDocUrl({
+                            name: r.panDocName || 'PAN_Document',
+                            url: r.panDocData || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
+                          })
+                        }
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-akr-gold text-xs font-semibold border border-zinc-700/80"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <FileText className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{r.panDocName}</span>
+                        </div>
+                        <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                          Preview <ExternalLink className="w-3 h-3" />
+                        </span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Actions Row */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                    <button
+                      type="button"
+                      onClick={() => setViewingRequest(r)}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Details</span>
+                    </button>
+
+                    {isPending && (
+                      <>
                         <button
                           type="button"
-                          onClick={() => setViewingRequest(r)}
-                          className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-colors flex items-center gap-1"
-                          title="View Full Application Details"
+                          onClick={() => {
+                            setApprovingRequest(r);
+                            setCreditLimit(150000);
+                            setAdminRemarks(`Approved for ${r.cardTypeName}. KYC verified.`);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm"
                         >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>View</span>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve</span>
                         </button>
 
-                        {isPending && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setApprovingRequest(r);
-                                setCreditLimit(150000);
-                                setAdminRemarks(`Approved for ${r.cardTypeName}. KYC verified.`);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1"
-                              title="Approve & Initiate Card"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Approve</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRejectingRequest(r);
-                                setAdminRemarks('Does not meet current credit underwriting guidelines.');
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 text-xs font-semibold border border-red-800/60 transition-colors"
-                              title="Reject Application"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                              <span>Reject</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectingRequest(r);
+                            setAdminRemarks('Does not meet current credit underwriting guidelines.');
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 text-xs font-semibold border border-red-800/60 flex items-center gap-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* View Full Application Modal */}

@@ -101,48 +101,96 @@ export const ActivityLogScreen: React.FC = () => {
           <Skeleton className="h-12 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="rounded-2xl bg-[#141417] border border-zinc-800 shadow-card-dark overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-[#1B1B1F] text-zinc-400 uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3 px-4">Timestamp</th>
-                  <th className="py-3 px-4">Admin Operator</th>
-                  <th className="py-3 px-4">Action</th>
-                  <th className="py-3 px-4">Consumer</th>
-                  <th className="py-3 px-4">Previous Value</th>
-                  <th className="py-3 px-4">New Value</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/80">
-                {filtered.map((log) => (
-                  <tr key={log.id} className="hover:bg-zinc-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-mono text-zinc-400 text-[11px]">
-                      {formatDisplayDate(log.createdAt, true)}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-white">
-                      {log.adminUser}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-akr-gold border border-zinc-700">
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-300 font-medium">
-                      {log.consumerName || log.consumerId}
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-400 font-mono text-[11px] max-w-xs truncate">
-                      {log.oldValue}
-                    </td>
-                    <td className="py-3.5 px-4 text-emerald-300 font-mono text-[11px] max-w-xs truncate">
-                      {log.newValue}
-                    </td>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block rounded-2xl bg-[#141417] border border-zinc-800 shadow-card-dark overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#1B1B1F] text-zinc-400 uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-3 px-4">Timestamp</th>
+                    <th className="py-3 px-4">Admin Operator</th>
+                    <th className="py-3 px-4">Action</th>
+                    <th className="py-3 px-4">Consumer</th>
+                    <th className="py-3 px-4">Previous Value</th>
+                    <th className="py-3 px-4">New Value</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80">
+                  {filtered.map((log) => (
+                    <tr key={log.id} className="hover:bg-zinc-800/40 transition-colors">
+                      <td className="py-3.5 px-4 font-mono text-zinc-400 text-[11px]">
+                        {formatDisplayDate(log.createdAt, true)}
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-white">
+                        {log.adminUser}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-akr-gold border border-zinc-700">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-zinc-300 font-medium">
+                        {log.consumerName || log.consumerId}
+                      </td>
+                      <td className="py-3.5 px-4 text-zinc-400 font-mono text-[11px] max-w-xs truncate">
+                        {log.oldValue}
+                      </td>
+                      <td className="py-3.5 px-4 text-emerald-300 font-mono text-[11px] max-w-xs truncate">
+                        {log.newValue}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile & Tablet Card View */}
+          <div className="lg:hidden space-y-3">
+            {filtered.map((log) => (
+              <div
+                key={log.id}
+                className="p-4 rounded-2xl bg-[#141417] border border-zinc-800/80 shadow-card-dark space-y-2.5 text-left"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-akr-gold border border-zinc-700 font-semibold">
+                    {log.action}
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-mono">
+                    {formatDisplayDate(log.createdAt, true)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <div>
+                    <span className="text-[10px] text-zinc-500 uppercase block font-semibold">Operator</span>
+                    <span className="font-semibold text-white">{log.adminUser}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-zinc-500 uppercase block font-semibold">Target Consumer</span>
+                    <span className="text-zinc-300">{log.consumerName || log.consumerId || '-'}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800/80 space-y-1 text-[11px] font-mono">
+                  {log.oldValue && log.oldValue !== '-' && (
+                    <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800 text-zinc-400 break-all">
+                      <span className="text-[9px] uppercase text-zinc-500 font-bold block mb-0.5">Previous:</span>
+                      {log.oldValue}
+                    </div>
+                  )}
+                  {log.newValue && log.newValue !== '-' && (
+                    <div className="p-2 rounded-lg bg-emerald-950/20 border border-emerald-900/40 text-emerald-300 break-all">
+                      <span className="text-[9px] uppercase text-emerald-500 font-bold block mb-0.5">Updated:</span>
+                      {log.newValue}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

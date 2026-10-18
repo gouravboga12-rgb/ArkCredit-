@@ -245,56 +245,114 @@ export const PaymentsScreen: React.FC = () => {
           <Skeleton className="h-12 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="rounded-2xl bg-[#141417] border border-zinc-800 shadow-card-dark overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-[#1B1B1F] text-zinc-400 uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3 px-4">Transaction Ref</th>
-                  <th className="py-3 px-4">Consumer</th>
-                  <th className="py-3 px-4">Plan / Instrument</th>
-                  <th className="py-3 px-4">Amount</th>
-                  <th className="py-3 px-4">Mode & Source</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Date & Time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/80">
-                {filtered.map((p) => (
-                  <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-semibold text-white">
-                      <div>{p.transactionRef}</div>
-                      <div className="text-[10px] text-zinc-400 font-mono">Ref: {p.reference}</div>
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-white">
-                      <div>{p.consumerName}</div>
-                      <div className="text-[10px] font-mono text-zinc-500">{p.consumerAccount}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-300">
-                      <div>{p.planTitle}</div>
-                      <span className="text-[10px] text-akr-gold uppercase font-mono">{p.planTypeName}</span>
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-emerald-400 text-sm">
-                      {formatCurrency(p.amount)}
-                    </td>
-                    <td className="py-3.5 px-4 text-zinc-300">
-                      <span className="font-semibold text-white uppercase">{p.mode}</span>
-                      <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-                        {p.source}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <StatusBadge status={p.status} size="sm" />
-                    </td>
-                    <td className="py-3.5 px-4 text-right text-zinc-400">
-                      {formatDisplayDate(p.createdAt, true)}
-                    </td>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block rounded-2xl bg-[#141417] border border-zinc-800 shadow-card-dark overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#1B1B1F] text-zinc-400 uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-3 px-4">Transaction Ref</th>
+                    <th className="py-3 px-4">Consumer</th>
+                    <th className="py-3 px-4">Plan / Instrument</th>
+                    <th className="py-3 px-4">Amount</th>
+                    <th className="py-3 px-4">Mode & Source</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Date & Time</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80">
+                  {filtered.map((p) => (
+                    <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-white">
+                        <div>{p.transactionRef}</div>
+                        <div className="text-[10px] text-zinc-400 font-mono">Ref: {p.reference}</div>
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-white">
+                        <div>{p.consumerName}</div>
+                        <div className="text-[10px] font-mono text-zinc-500">{p.consumerAccount}</div>
+                      </td>
+                      <td className="py-3.5 px-4 text-zinc-300">
+                        <div>{p.planTitle}</div>
+                        <span className="text-[10px] text-akr-gold uppercase font-mono">{p.planTypeName}</span>
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-emerald-400 text-sm">
+                        {formatCurrency(p.amount)}
+                      </td>
+                      <td className="py-3.5 px-4 text-zinc-300">
+                        <span className="font-semibold text-white uppercase">{p.mode}</span>
+                        <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                          {p.source}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <StatusBadge status={p.status} size="sm" />
+                      </td>
+                      <td className="py-3.5 px-4 text-right text-zinc-400">
+                        {formatDisplayDate(p.createdAt, true)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile & Tablet Card View */}
+          <div className="lg:hidden space-y-3">
+            {filtered.map((p) => (
+              <div
+                key={p.id}
+                className="p-4 rounded-2xl bg-[#141417] border border-zinc-800/80 shadow-card-dark space-y-3 text-left"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-white block">
+                      {p.transactionRef}
+                    </span>
+                    <span className="text-[10px] text-zinc-400 font-mono">
+                      UTR / Ref: {p.reference}
+                    </span>
+                  </div>
+                  <StatusBadge status={p.status} size="sm" />
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-xs">
+                  <div>
+                    <span className="font-semibold text-white block">{p.consumerName}</span>
+                    <span className="text-[10px] text-zinc-400 font-mono">{p.consumerAccount}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-emerald-400 text-base block">
+                      {formatCurrency(p.amount)}
+                    </span>
+                    <span className="text-[10px] text-zinc-500">Amount Paid</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-xs">
+                  <div>
+                    <span className="text-zinc-300 block">{p.planTitle}</span>
+                    <span className="text-[10px] text-akr-gold uppercase font-mono">{p.planTypeName}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px] font-bold uppercase border border-zinc-700">
+                      {p.mode}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 text-[9px] uppercase font-mono">
+                      {p.source}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/60 flex items-center justify-between">
+                  <span>Timestamp</span>
+                  <span className="font-mono">{formatDisplayDate(p.createdAt, true)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Record Offline Payment Modal */}
