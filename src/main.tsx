@@ -2,7 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './app/router';
-import { DevToolbar } from './components/dev/DevToolbar';
 import './index.css';
 
 async function enableMocking() {
@@ -31,7 +30,6 @@ enableMocking().finally(() => {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <RouterProvider router={router} />
-      <DevToolbar />
     </React.StrictMode>
   );
 });
