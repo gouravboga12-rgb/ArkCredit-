@@ -72,7 +72,13 @@ export const HomeScreen: React.FC = () => {
 
   const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
 
+  const isDefaultApprovedUser =
+    consumer?.mobile === '9876543210' ||
+    consumer?.id === 'c_rahul_4821' ||
+    (consumer?.name ? consumer.name.toLowerCase().includes('rahul') : false);
+
   const isCardApproved =
+    isDefaultApprovedUser ||
     consumer?.cardApproved === true ||
     approvedCardRequest !== null ||
     userCardRequest?.status === 'approved';
@@ -163,10 +169,10 @@ export const HomeScreen: React.FC = () => {
     }
   }, [consumer, consumerSession]);
 
-  // If approved card request exists but consumer profile is not yet approved in store, reconcile immediately
+  // If approved card request exists or default approved user, but consumer profile is not yet approved in store, reconcile immediately
   useEffect(() => {
-    if (approvedCardRequest && consumer) {
-      const targetLimit = approvedCardRequest.creditLimitApproved || 30000;
+    if ((approvedCardRequest || isDefaultApprovedUser) && consumer) {
+      const targetLimit = approvedCardRequest?.creditLimitApproved || 30000;
       if (!consumer.cardApproved || consumer.creditLimit !== targetLimit) {
         const cardNum = consumer.cardNumber || `5123 •••• •••• ${consumer.mobile.slice(-4)}`;
         const updatedConsumer: Consumer = {
@@ -196,7 +202,7 @@ export const HomeScreen: React.FC = () => {
         } catch (e) {}
       }
     }
-  }, [approvedCardRequest, consumer]);
+  }, [approvedCardRequest, isDefaultApprovedUser, consumer]);
 
   const getPlanIcon = (plan: DuesPlan) => {
     if (plan.planTypeId.includes('card_bill')) return <Receipt className="w-4 h-4 text-akr-gold" />;

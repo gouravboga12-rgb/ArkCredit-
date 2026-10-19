@@ -925,7 +925,7 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'akr_credit_capital_data_store',
-      version: 6,
+      version: 7,
       migrate: (persistedState: any, version: number) => {
         let state = persistedState || {};
         if (version < 4) {
@@ -1016,6 +1016,67 @@ export const useStore = create<StoreState>()(
             cardRequests: reconciledCardRequests,
             consumers: reconciledConsumers,
             consumerSession: reconciledConsumerSession,
+          };
+        }
+        if (version < 7) {
+          // Ensure Rahul Sharma is approved with ₹30,000 credit limit by default
+          const rawRequests: CardRequest[] = Array.isArray(state.cardRequests) && state.cardRequests.length > 0
+            ? state.cardRequests
+            : INITIAL_CARD_REQUESTS;
+
+          const updatedRequests = rawRequests.map((r: CardRequest) => {
+            if (r.phone === '9876543210' || r.consumerId === 'c_rahul_4821') {
+              return {
+                ...r,
+                status: 'approved' as const,
+                creditLimitApproved: 30000,
+                adminRemarks: 'Card Approved with ₹30,000 credit limit',
+              };
+            }
+            return r;
+          });
+
+          const consumersList = Array.isArray(state.consumers) && state.consumers.length > 0
+            ? state.consumers
+            : INITIAL_CONSUMERS;
+
+          const updatedConsumers = consumersList.map((c: Consumer) => {
+            if (c.mobile === '9876543210' || c.id === 'c_rahul_4821') {
+              return {
+                ...c,
+                cardApproved: true,
+                cardStatus: 'approved' as const,
+                creditLimit: 30000,
+                cardNumber: c.cardNumber || '5123 •••• •••• 4821',
+              };
+            }
+            return c;
+          });
+
+          let updatedSession = state.consumerSession;
+          if (updatedSession?.consumer) {
+            if (updatedSession.consumer.mobile === '9876543210' || updatedSession.consumer.id === 'c_rahul_4821') {
+              updatedSession = {
+                ...updatedSession,
+                consumer: {
+                  ...updatedSession.consumer,
+                  cardApproved: true,
+                  cardStatus: 'approved',
+                  creditLimit: 30000,
+                  cardNumber: updatedSession.consumer.cardNumber || '5123 •••• •••• 4821',
+                },
+              };
+              try {
+                localStorage.setItem('akr_consumer_session', JSON.stringify(updatedSession));
+              } catch (e) {}
+            }
+          }
+
+          state = {
+            ...state,
+            cardRequests: updatedRequests,
+            consumers: updatedConsumers,
+            consumerSession: updatedSession,
           };
         }
         return state;
