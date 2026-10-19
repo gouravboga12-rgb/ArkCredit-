@@ -11,6 +11,9 @@ import {
   Clock,
   CheckCircle,
   FileSpreadsheet,
+  AlertTriangle,
+  ShieldCheck,
+  ArrowRight,
 } from 'lucide-react';
 import {
   BarChart,
@@ -61,6 +64,21 @@ export const DashboardScreen: React.FC = () => {
     .filter((p) => p.status === 'active' && p.outstandingAmount > 0 && p.nextEmiDate)
     .sort((a, b) => new Date(a.nextEmiDate).getTime() - new Date(b.nextEmiDate).getTime())
     .slice(0, 5);
+
+  // Overdue Plans Filter & Metrics for Overdue Checking Section
+  const isPlanOverdue = (p: any) =>
+    p.status === 'active' &&
+    p.outstandingAmount > 0 &&
+    (Boolean(p.overdueAmount && p.overdueAmount > 0) ||
+      Boolean(p.nextEmiDate && new Date(p.nextEmiDate) < new Date()));
+
+  const overduePlans = duesPlans.filter(isPlanOverdue);
+  const totalOverdueBase = overduePlans.reduce(
+    (sum, p) => sum + (p.emiAmount * (p.missedWeeks || p.missedMonths || 1)),
+    0
+  );
+  const totalOverdueLateFees = overduePlans.reduce((sum, p) => sum + (p.overdueAmount || 0), 0);
+  const totalMandatoryOverdue = totalOverdueBase + totalOverdueLateFees;
 
   // Collections per month data for Recharts Bar Chart
   const monthlyCollectionsData = [
@@ -312,6 +330,154 @@ export const DashboardScreen: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Overdue Accounts & Collections Checking Section */}
+      <div className="p-5 rounded-2xl bg-gradient-to-b from-[#1E1212] to-[#141417] border-2 border-red-500/40 shadow-card-dark space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-red-500/20">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
+              <AlertTriangle className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white tracking-wide">
+                  Overdue Accounts & Collections Checking
+                </h3>
+                <span className="text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded-full">
+                  {overduePlans.length} Delinquent
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Weekly installments past due with mandatory penalty enforcement
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs">
+            <div className="px-3 py-1.5 rounded-xl bg-black/40 border border-red-500/30">
+              <span className="text-[10px] text-zinc-400 uppercase block">Total Due + Late Fee</span>
+              <span className="text-sm font-bold text-akr-gold font-sans">{formatCurrency(totalMandatoryOverdue)}</span>
+            </div>
+            <button
+              onClick={() => navigate('/admin/dues')}
+              className="text-xs font-semibold text-red-400 hover:text-red-300 hover:underline flex items-center gap-1"
+            >
+              <span>Manage in Dues</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {overduePlans.length > 0 ? (
+          <>
+            {/* Desktop Overdue Table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#241515] text-red-300 uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-2.5 px-4 rounded-l-lg">Consumer</th>
+                    <th className="py-2.5 px-4">Account Number</th>
+                    <th className="py-2.5 px-4">Product Purchase</th>
+                    <th className="py-2.5 px-4">Overdue Duration</th>
+                    <th className="py-2.5 px-4">Weekly EMI</th>
+                    <th className="py-2.5 px-4">Late Penalty</th>
+                    <th className="py-2.5 px-4">Mandatory Min</th>
+                    <th className="py-2.5 px-4 rounded-r-lg text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-red-950/60">
+                  {overduePlans.map((p) => {
+                    const consumer = consumers.find((c) => c.id === p.consumerId);
+                    const missedWks = p.missedWeeks || p.missedMonths || 1;
+                    const mandatoryMin = (p.emiAmount * missedWks) + (p.overdueAmount || 0);
+                    return (
+                      <tr key={p.id} className="hover:bg-red-950/30 transition-colors">
+                        <td className="py-3 px-4 font-bold text-white">
+                          {consumer?.name || 'Customer'}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-zinc-300">
+                          {consumer?.accountNumber || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-zinc-200">
+                          <div>{p.title}</div>
+                          <div className="text-[10px] text-zinc-500 font-mono">Ref: {p.referenceNumber}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1 text-[10px] bg-red-950 border border-red-700/80 text-red-300 font-bold px-2 py-0.5 rounded-full">
+                            <span>⚠️</span> {missedWks} {missedWks === 1 ? 'Week' : 'Weeks'} Missed
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-zinc-300">
+                          {formatCurrency(p.emiAmount)} /wk
+                        </td>
+                        <td className="py-3 px-4 font-bold text-red-400">
+                          +{formatCurrency(p.overdueAmount || 0)}
+                        </td>
+                        <td className="py-3 px-4 font-extrabold text-akr-gold text-sm font-sans">
+                          {formatCurrency(mandatoryMin)}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => navigate('/admin/dues')}
+                            className="px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-700/60 text-red-200 text-xs font-semibold transition-colors"
+                          >
+                            Adjust Penalty
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile / Tablet Overdue Cards */}
+            <div className="lg:hidden space-y-2.5">
+              {overduePlans.map((p) => {
+                const consumer = consumers.find((c) => c.id === p.consumerId);
+                const missedWks = p.missedWeeks || p.missedMonths || 1;
+                const mandatoryMin = (p.emiAmount * missedWks) + (p.overdueAmount || 0);
+                return (
+                  <div
+                    key={p.id}
+                    className="p-3.5 rounded-xl bg-red-950/30 border border-red-500/40 space-y-2 text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-white">{consumer?.name || 'Customer'}</h4>
+                        <span className="text-[10px] font-mono text-zinc-400">{consumer?.accountNumber}</span>
+                      </div>
+                      <span className="text-[10px] bg-red-900/60 border border-red-600 text-red-200 font-bold px-2 py-0.5 rounded-full">
+                        {missedWks} wk missed
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-red-900/40 text-xs">
+                      <div>
+                        <span className="text-zinc-200 font-medium block">{p.title}</span>
+                        <span className="text-[10px] text-zinc-400">Due: {formatDisplayDate(p.nextEmiDate)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-extrabold text-akr-gold text-sm block">
+                          {formatCurrency(mandatoryMin)}
+                        </span>
+                        <span className="text-[10px] text-red-400">+{formatCurrency(p.overdueAmount || 0)} Fee</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="p-4 rounded-xl bg-black/30 border border-zinc-800 text-center">
+            <ShieldCheck className="w-7 h-7 text-emerald-400 mx-auto mb-1.5 opacity-90" />
+            <p className="font-bold text-white text-xs">Zero Overdue Accounts</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">
+              All weekly product EMI installments are currently operating on schedule.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Upcoming EMIs Table */}

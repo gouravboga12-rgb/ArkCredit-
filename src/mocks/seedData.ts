@@ -90,6 +90,7 @@ export const INITIAL_ADMIN_USERS: AdminUser[] = [
 ];
 
 export const INITIAL_CONSUMERS: Consumer[] = [
+  // Account 1: 100% Clean test account for manual testing flow
   {
     id: 'c_rahul_4821',
     name: 'Rahul Sharma',
@@ -111,6 +112,22 @@ export const INITIAL_CONSUMERS: Consumer[] = [
       promotionalOffers: true,
     },
   },
+  // Account 2: Clean test account without EMIs
+  {
+    id: 'c_sneha_7733',
+    name: 'Sneha Reddy',
+    mobile: '9811223344',
+    email: 'sneha.reddy@example.com',
+    address: 'Flat 102, Silver Oak Enclave, Jubilee Hills, Hyderabad 500033',
+    accountNumber: 'AKR10007733',
+    status: 'active',
+    passwordHash: 'Demo@123',
+    cardApproved: false,
+    creditLimit: 0,
+    cardStatus: 'not_applied',
+    createdAt: '2025-03-12T10:00:00.000Z',
+  },
+  // Account 3: Dummy account with active on-time weekly EMI
   {
     id: 'c_priya_5512',
     name: 'Priya Nair',
@@ -120,11 +137,13 @@ export const INITIAL_CONSUMERS: Consumer[] = [
     accountNumber: 'AKR10005512',
     status: 'active',
     passwordHash: 'Demo@123',
-    cardApproved: false,
-    creditLimit: 0,
-    cardStatus: 'not_applied',
+    cardApproved: true,
+    creditLimit: 300000,
+    cardStatus: 'approved',
+    cardNumber: '5241 •••• •••• 7492',
     createdAt: '2025-03-15T11:00:00.000Z',
   },
+  // Account 4: Dummy account with overdue weekly EMI for testing Overdue Checking section
   {
     id: 'c_amit_9823',
     name: 'Amit Patel',
@@ -134,18 +153,86 @@ export const INITIAL_CONSUMERS: Consumer[] = [
     accountNumber: 'AKR10009823',
     status: 'active',
     passwordHash: 'Demo@123',
-    cardApproved: false,
-    creditLimit: 0,
-    cardStatus: 'not_applied',
+    cardApproved: true,
+    creditLimit: 100000,
+    cardStatus: 'approved',
+    cardNumber: '5319 •••• •••• 6105',
     createdAt: '2025-03-18T12:00:00.000Z',
   },
 ];
 
-// Clean start: No pre-existing loans or dues plans across dummy accounts
-export const INITIAL_DUES_PLANS: DuesPlan[] = [];
+// Test dues plans: Rahul & Sneha have 0 EMIs; Priya has On-Time; Amit has Overdue
+export const INITIAL_DUES_PLANS: DuesPlan[] = [
+  // Priya Nair's Plan: Active On-Time Saree Purchase (Weekly EMI ₹2,500)
+  {
+    id: 'plan_priya_1',
+    consumerId: 'c_priya_5512',
+    planTypeId: 'pt_saree_bridal',
+    title: 'Paithani Pure Silk Handloom Saree',
+    productName: 'Traditional Yeola Paithani Pure Silk Saree with Peacock Border',
+    referenceNumber: 'SAR-2026-1192',
+    status: 'active',
+    outstandingAmount: 12500,
+    totalPaymentDue: 30000,
+    principal: 12500,
+    interest: 0,
+    processingFee: 0,
+    emiAmount: 2500,
+    nextEmiDate: '2026-10-22',
+    totalEmis: 12,
+    remainingEmis: 5,
+    tenureWeeks: 12,
+    frequency: 'weekly',
+    linkedCardTypeId: 'card_emi_privilege',
+    createdAt: '2026-07-20T10:00:00.000Z',
+    updatedAt: '2026-10-15T00:00:00.000Z',
+  },
+  // Amit Patel's Plan: Overdue Weekly Saree Purchase (1 week missed, ₹250 penalty)
+  {
+    id: 'plan_amit_1',
+    consumerId: 'c_amit_9823',
+    planTypeId: 'pt_saree_bridal',
+    title: 'Kanchipuram Silk Bridal Saree',
+    productName: 'Kanchipuram Heavy Zari Bridal Silk Saree - Crimson Red',
+    referenceNumber: 'SAR-2026-8821',
+    status: 'active',
+    outstandingAmount: 14000,
+    totalPaymentDue: 25200,
+    principal: 14000,
+    interest: 0,
+    processingFee: 0,
+    emiAmount: 1400,
+    nextEmiDate: '2026-10-12',
+    totalEmis: 18,
+    remainingEmis: 10,
+    tenureWeeks: 18,
+    frequency: 'weekly',
+    linkedCardTypeId: 'card_emi_privilege',
+    overdueAmount: 250,
+    missedWeeks: 1,
+    missedMonths: 1,
+    overdueRemarks: 'Past due by 7 days (1 missed weekly payment). Administrative penalty applied.',
+    overdueAssignedAt: '2026-10-14T10:00:00.000Z',
+    createdAt: '2026-06-10T10:00:00.000Z',
+    updatedAt: '2026-10-14T10:00:00.000Z',
+  },
+];
 
-// Clean start: No past dummy payments
-export const INITIAL_PAYMENTS: Payment[] = [];
+export const INITIAL_PAYMENTS: Payment[] = [
+  {
+    id: 'pay_priya_1',
+    transactionRef: 'TXN-AKR-20260920-8812',
+    consumerId: 'c_priya_5512',
+    planId: 'plan_priya_1',
+    planTypeId: 'pt_saree_bridal',
+    amount: 2500,
+    mode: 'UPI',
+    status: 'success',
+    reference: 'UPI/226301948211',
+    source: 'online',
+    createdAt: '2026-09-20T11:15:00.000Z',
+  },
+];
 
 export const INITIAL_NOTIFICATIONS: AppNotification[] = [
   {

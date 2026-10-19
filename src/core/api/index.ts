@@ -82,7 +82,11 @@ async function request<T>(
   });
 
   const isJson = response.headers.get('content-type')?.includes('application/json');
-  const data = isJson ? await response.json() : await response.text();
+  if (!isJson) {
+    throw new ApiClientError(503, 'Expected JSON response but received non-JSON payload. Service worker may be activating.');
+  }
+
+  const data = await response.json();
 
   if (!response.ok) {
     const errorMessage =

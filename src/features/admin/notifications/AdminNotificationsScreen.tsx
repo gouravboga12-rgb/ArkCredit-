@@ -22,13 +22,15 @@ export const AdminNotificationsScreen: React.FC = () => {
     try {
       setLoading(true);
       const [nData, cData] = await Promise.all([
-        adminApi.getNotifications(),
-        adminApi.getConsumers(),
+        adminApi.getNotifications().catch(() => []),
+        adminApi.getConsumers().catch(() => []),
       ]);
-      setNotifications(nData);
-      setConsumers(cData);
+      setNotifications(Array.isArray(nData) ? nData : []);
+      setConsumers(Array.isArray(cData) ? cData : []);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load notifications or consumers', err);
+      setNotifications([]);
+      setConsumers([]);
     } finally {
       setLoading(false);
     }
@@ -151,8 +153,8 @@ export const AdminNotificationsScreen: React.FC = () => {
                 onChange={(e) => setRecipient(e.target.value)}
                 className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold"
               >
-                <option value="all">Broadcast to All Active Consumers ({consumers.length})</option>
-                {consumers.map((c) => (
+                <option value="all">Broadcast to All Active Consumers ({Array.isArray(consumers) ? consumers.length : 0})</option>
+                {Array.isArray(consumers) && consumers.map((c) => (
                   <option key={c.id} value={c.id}>
                     Single Consumer: {c.name} ({c.accountNumber})
                   </option>
@@ -193,12 +195,12 @@ export const AdminNotificationsScreen: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-white tracking-wide mb-3 flex items-center gap-2">
               <Bell className="w-4 h-4 text-akr-gold" />
-              <span>Recent Dispatches ({notifications.length})</span>
+              <span>Recent Dispatches ({Array.isArray(notifications) ? notifications.length : 0})</span>
             </h3>
 
             <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
-              {notifications.map((n) => {
-                const con = consumers.find((c) => c.id === n.consumerId);
+              {Array.isArray(notifications) && notifications.map((n) => {
+                const con = Array.isArray(consumers) ? consumers.find((c) => c.id === n.consumerId) : undefined;
                 return (
                   <div key={n.id} className="p-3 rounded-xl bg-akr-bg border border-zinc-800 text-xs">
                     <div className="flex items-center justify-between mb-1">

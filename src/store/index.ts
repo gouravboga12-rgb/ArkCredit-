@@ -895,9 +895,9 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'akr_credit_capital_data_store',
-      version: 3,
+      version: 4,
       migrate: (persistedState: any, version: number) => {
-        if (version < 3 || (persistedState?.duesPlans && persistedState.duesPlans.length > 0)) {
+        if (version < 4) {
           return {
             ...persistedState,
             consumers: INITIAL_CONSUMERS,

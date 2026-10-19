@@ -11,16 +11,12 @@ async function enableMocking() {
   }
   try {
     const { worker } = await import('./mocks/browser');
-    // Start worker with race to avoid blocking in headless browser environments
-    await Promise.race([
-      worker.start({
-        onUnhandledRequest: 'bypass',
-        serviceWorker: {
-          url: '/mockServiceWorker.js',
-        },
-      }),
-      new Promise((resolve) => setTimeout(resolve, 800)),
-    ]);
+    await worker.start({
+      onUnhandledRequest: 'bypass',
+      serviceWorker: {
+        url: '/mockServiceWorker.js',
+      },
+    });
   } catch (err) {
     console.warn('MSW worker initialization warning:', err);
   }
