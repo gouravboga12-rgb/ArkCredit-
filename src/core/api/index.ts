@@ -265,6 +265,15 @@ export const adminApi = {
       method: 'DELETE',
     }, 'admin'),
 
+  setPlanOverdueFee: (
+    id: string,
+    data: { overdueAmount: number; missedWeeks?: number; missedMonths?: number; remarks?: string }
+  ) =>
+    request<DuesPlan>(`/admin/dues/${id}/overdue`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }, 'admin'),
+
   bulkUploadDues: (rows: any[]) =>
     request<{ successCount: number; errors: string[] }>('/admin/dues/bulk', {
       method: 'POST',

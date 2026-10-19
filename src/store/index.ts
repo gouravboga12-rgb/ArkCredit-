@@ -93,6 +93,13 @@ interface StoreState {
     }>,
     adminName: string
   ) => { successCount: number; errors: string[] };
+  setPlanOverdueFee: (
+    planId: string,
+    overdueAmount: number,
+    missedWeeks: number,
+    remarks: string,
+    adminName: string
+  ) => DuesPlan | null;
 
   // Payment operations
   executePayment: (
@@ -216,6 +223,8 @@ export const useStore = create<StoreState>()(
           ...consumerData,
           id,
           createdAt: new Date().toISOString(),
+          cardApproved: consumerData.cardApproved ?? false,
+          cardStatus: consumerData.cardStatus ?? 'not_applied',
         };
         set((state) => ({ consumers: [newConsumer, ...state.consumers] }));
         return newConsumer;
@@ -532,7 +541,15 @@ export const useStore = create<StoreState>()(
             if (!targetPlan) return;
 
             const isEmi = alloc.allocatedAmount >= targetPlan.emiAmount;
-            const updated = applyPaymentToPlan(targetPlan, alloc.allocatedAmount, isEmi);
+            let updated = applyPaymentToPlan(targetPlan, alloc.allocatedAmount, isEmi);
+            if (targetPlan.overdueAmount) {
+              updated = {
+                ...updated,
+                overdueAmount: 0,
+                missedMonths: 0,
+                overdueRemarks: undefined,
+              };
+            }
 
             updatedPlans = updatedPlans.map((p) => (p.id === alloc.planId ? updated : p));
 
@@ -556,7 +573,15 @@ export const useStore = create<StoreState>()(
           const targetPlan = updatedPlans.find((p) => p.id === planId);
           if (targetPlan) {
             const isEmi = amount >= targetPlan.emiAmount;
-            const updated = applyPaymentToPlan(targetPlan, amount, isEmi);
+            let updated = applyPaymentToPlan(targetPlan, amount, isEmi);
+            if (targetPlan.overdueAmount) {
+              updated = {
+                ...updated,
+                overdueAmount: 0,
+                missedMonths: 0,
+                overdueRemarks: undefined,
+              };
+            }
             updatedPlans = updatedPlans.map((p) => (p.id === planId ? updated : p));
 
             const paymentRec: Payment = {
@@ -698,39 +723,129 @@ export const useStore = create<StoreState>()(
         return newRequest;
       },
 
+      setPlanOverdueFee: (planId, overdueAmount, missedWeeks, remarks, adminName) => {
+        const { duesPlans, consumers } = get();
+        const plan = duesPlans.find((p) => p.id === planId);
+        if (!plan) return null;
+        const consumer = consumers.find((c) => c.id === plan.consumerId);
+
+        const updatedPlan: DuesPlan = {
+          ...plan,
+          overdueAmount,
+          missedWeeks: missedWeeks || 1,
+          missedMonths: missedWeeks || 1,
+          overdueRemarks: remarks,
+          overdueAssignedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        const updatedPlans = duesPlans.map((p) => (p.id === planId ? updatedPlan : p));
+
+        get().logActivity({
+          adminUser: adminName,
+          action: 'LEVY_OVERDUE_FEE',
+          consumerId: plan.consumerId,
+          consumerName: consumer?.name || 'Consumer',
+          oldValue: `Overdue: ₹${plan.overdueAmount || 0}`,
+          newValue: `Late Fee: ₹${overdueAmount} (${missedWeeks || 1} wk, total: ₹${(plan.emiAmount * (missedWeeks || 1)) + overdueAmount})`,
+        });
+
+        get().sendNotification({
+          consumerId: plan.consumerId,
+          title: '⚠️ Overdue Notice & Late Fee Applied',
+          message: `A late payment charge of ₹${overdueAmount.toLocaleString('en-IN')} has been applied to "${plan.title}". Total overdue payable is ₹${((plan.emiAmount * (missedWeeks || 1)) + overdueAmount).toLocaleString('en-IN')}. Please clear immediately.`,
+          type: 'emi_reminder',
+        });
+
+        set({ duesPlans: updatedPlans });
+        return updatedPlan;
+      },
+
       updateCardRequestStatus: (id, status, adminName, remarks, creditLimit) => {
         const { cardRequests } = get();
         const target = cardRequests.find((r) => r.id === id);
         if (!target) return null;
         const now = new Date().toISOString();
+        const approvedLimit = creditLimit !== undefined ? creditLimit : (target.creditLimitApproved || 50000);
         const updated: CardRequest = {
           ...target,
           status,
           adminRemarks: remarks || target.adminRemarks,
-          creditLimitApproved: creditLimit !== undefined ? creditLimit : target.creditLimitApproved,
+          creditLimitApproved: status === 'approved' ? approvedLimit : target.creditLimitApproved,
           updatedAt: now,
         };
 
+        // Sync Consumer: When approved, mark cardApproved: true and assign credit limit!
+        const { consumers, consumerSession } = get();
+        let updatedConsumers = [...consumers];
+        let foundConsumer = updatedConsumers.find(
+          (c) => (target.consumerId && c.id === target.consumerId) ||
+                 c.mobile === target.phone ||
+                 (target.email && c.email.toLowerCase() === target.email.toLowerCase())
+        );
+
+        let newSession = consumerSession;
+        const cardNum = `51${Math.floor(10 + Math.random() * 90)} •••• •••• ${target.phone.slice(-4)}`;
+
+        if (status === 'approved') {
+          if (foundConsumer) {
+            foundConsumer = {
+              ...foundConsumer,
+              cardApproved: true,
+              cardStatus: 'approved',
+              creditLimit: approvedLimit,
+              cardNumber: foundConsumer.cardNumber || cardNum,
+            };
+            updatedConsumers = updatedConsumers.map((c) => (c.id === foundConsumer!.id ? foundConsumer! : c));
+          } else {
+            // Create approved consumer so they now appear in admin consumers page!
+            const newAccSuffix = Math.floor(1000 + Math.random() * 9000);
+            foundConsumer = {
+              id: target.consumerId || `c_${Date.now()}`,
+              name: target.fullName,
+              mobile: target.phone,
+              email: target.email || `user${newAccSuffix}@akr.com`,
+              address: target.address,
+              accountNumber: `AKR1000${newAccSuffix}`,
+              status: 'active',
+              passwordHash: 'Demo@123',
+              cardApproved: true,
+              creditLimit: approvedLimit,
+              cardStatus: 'approved',
+              cardNumber: cardNum,
+              createdAt: target.createdAt || now,
+            };
+            updatedConsumers = [foundConsumer, ...updatedConsumers];
+          }
+
+          if (consumerSession && (consumerSession.consumer.id === foundConsumer.id || consumerSession.consumer.mobile === target.phone)) {
+            newSession = { ...consumerSession, consumer: foundConsumer };
+            localStorage.setItem('akr_consumer_session', JSON.stringify(newSession));
+          }
+        }
+
         set({
           cardRequests: cardRequests.map((r) => (r.id === id ? updated : r)),
+          consumers: updatedConsumers,
+          consumerSession: newSession,
         });
 
         get().logActivity({
           adminUser: adminName,
           action: status === 'approved' ? 'APPROVE_CARD_REQUEST' : 'REJECT_CARD_REQUEST',
-          consumerId: target.consumerId || 'applicant',
+          consumerId: target.consumerId || foundConsumer?.id || 'applicant',
           consumerName: target.fullName,
           oldValue: `Status: ${target.status}`,
-          newValue: `Status: ${status} (Card: ${target.cardTypeName}, Ref: ${target.referenceNumber})`,
+          newValue: `Status: ${status} (Card: ${target.cardTypeName}, Limit: ₹${approvedLimit.toLocaleString('en-IN')})`,
         });
 
-        if (target.consumerId) {
+        if (target.consumerId || foundConsumer) {
           get().sendNotification({
-            consumerId: target.consumerId,
+            consumerId: target.consumerId || foundConsumer!.id,
             title: status === 'approved' ? 'Card Application Approved! 🎉' : 'Card Application Update',
             message:
               status === 'approved'
-                ? `Congratulations! Your ${target.cardTypeName} application (${target.referenceNumber}) has been approved with a limit of ₹${(creditLimit || 100000).toLocaleString('en-IN')}.`
+                ? `Congratulations! Your ${target.cardTypeName} application (${target.referenceNumber}) has been approved with a limit of ₹${approvedLimit.toLocaleString('en-IN')}.`
                 : `Your ${target.cardTypeName} application (${target.referenceNumber}) could not be approved at this time. ${remarks || ''}`,
             type: 'general',
           });

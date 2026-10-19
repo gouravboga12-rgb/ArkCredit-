@@ -71,7 +71,9 @@ export function determineDueStatus(
   const activePlans = plans.filter((p) => p.status === 'active' && p.outstandingAmount > 0);
   if (activePlans.length === 0) return 'Clear';
 
-  const hasOverdue = activePlans.some((p) => isPastDate(p.nextEmiDate, refDate));
+  const hasOverdue = activePlans.some(
+    (p) => (p.overdueAmount && p.overdueAmount > 0) || isPastDate(p.nextEmiDate, refDate)
+  );
   if (hasOverdue) return 'Overdue';
 
   const hasDueSoon = activePlans.some((p) => isWithinDays(p.nextEmiDate, 7, refDate));
@@ -142,6 +144,21 @@ export function advanceDateByOneMonth(dateStr: string): string {
 }
 
 /**
+ * Advances a date by N weeks (7 days per week).
+ */
+export function advanceDateByWeeks(dateStr: string, weeks = 1): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+
+  d.setDate(d.getDate() + weeks * 7);
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
  * Allocates a "Pay All" amount across active plans:
  * Priority: Earliest next EMI date first, then largest outstanding.
  */
@@ -191,7 +208,7 @@ export function allocatePayAllAmount(
  * Returns the updated plan.
  * - Reduces outstandingAmount by paymentAmount (and adjusts principal proportionally)
  * - Decrements remainingEmis if it was an EMI payment
- * - Advances nextEmiDate by 1 month if remainingEmis > 0
+ * - Advances nextEmiDate by 1 week (or N weeks if overdue) if remainingEmis > 0
  * - Closes plan if outstanding reaches 0
  */
 export function applyPaymentToPlan(
@@ -212,9 +229,13 @@ export function applyPaymentToPlan(
   let newNextEmiDate = plan.nextEmiDate;
 
   if (isEmiPayment || actualPay >= plan.emiAmount) {
-    newRemainingEmis = Math.max(0, plan.remainingEmis - 1);
+    const weeksPaid = Math.max(1, plan.missedWeeks || plan.missedMonths || 1);
+    newRemainingEmis = Math.max(0, plan.remainingEmis - weeksPaid);
     if (newRemainingEmis > 0 && newOutstanding > 0) {
-      newNextEmiDate = advanceDateByOneMonth(plan.nextEmiDate);
+      newNextEmiDate =
+        plan.frequency === 'monthly'
+          ? advanceDateByOneMonth(plan.nextEmiDate)
+          : advanceDateByWeeks(plan.nextEmiDate, weeksPaid);
     }
   }
 
@@ -226,6 +247,10 @@ export function applyPaymentToPlan(
     processingFee: newFee,
     remainingEmis: newRemainingEmis,
     nextEmiDate: newNextEmiDate,
+    overdueAmount: 0,
+    missedWeeks: 0,
+    missedMonths: 0,
+    overdueRemarks: undefined,
     status: newOutstanding === 0 ? 'closed' : 'active',
     updatedAt: new Date().toISOString(),
   };

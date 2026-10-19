@@ -13,6 +13,8 @@ import {
   Smartphone,
   CreditCard,
   Landmark,
+  AlertTriangle,
+  AlertCircle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useStore } from '../../store';
@@ -84,9 +86,46 @@ export const PayDuesScreen: React.FC = () => {
     ? plans[0]?.nextEmiDate || ''
     : currentPlan?.nextEmiDate || '';
 
+  // Check Overdue status
+  const isPlanOverdue = (p: DuesPlan) => {
+    if (!p) return false;
+    const hasLateFee = (p.overdueAmount || 0) > 0;
+    const isPastDue = Boolean(p.nextEmiDate && new Date(p.nextEmiDate) < new Date());
+    return hasLateFee || isPastDue;
+  };
+
+  const overduePlans = isPayAll
+    ? plans.filter(isPlanOverdue)
+    : currentPlan && isPlanOverdue(currentPlan)
+    ? [currentPlan]
+    : [];
+
+  const hasOverdue = overduePlans.length > 0;
+
+  const totalLateFee = overduePlans.reduce((sum, p) => sum + (p.overdueAmount || 0), 0);
+  const totalMissedWeeks = isPayAll
+    ? overduePlans.reduce((sum, p) => Math.max(sum, p.missedWeeks || p.missedMonths || 1), 1)
+    : currentPlan?.missedWeeks || currentPlan?.missedMonths || 1;
+
+  // Overdue EMI base (EMI * missed weeks)
+  const overdueBaseEmi = isPayAll
+    ? overduePlans.reduce((sum, p) => sum + (p.emiAmount * (p.missedWeeks || p.missedMonths || 1)), 0)
+    : (currentPlan?.emiAmount || 0) * (currentPlan?.missedWeeks || currentPlan?.missedMonths || 1);
+
+  // Non-overdue plans regular 1-month EMI when paying all
+  const nonOverdueEmi = isPayAll
+    ? plans.filter((p) => !isPlanOverdue(p)).reduce((sum, p) => sum + p.emiAmount, 0)
+    : 0;
+
+  // Mandatory non-negotiable minimum overdue payment total
+  const mandatoryOverdueTotal = overdueBaseEmi + totalLateFee + nonOverdueEmi;
+
   // Calculate actual payable amount
   const payableAmount = (() => {
     if (paymentOption === 'emi') {
+      if (hasOverdue) {
+        return Math.min(mandatoryOverdueTotal, totalOutstanding);
+      }
       return nextEmiAmount > 0 ? nextEmiAmount : totalOutstanding;
     }
     if (paymentOption === 'full') {
@@ -96,11 +135,22 @@ export const PayDuesScreen: React.FC = () => {
     return isNaN(parsed) || parsed <= 0 ? 0 : Math.min(parsed, totalOutstanding);
   })();
 
+  const isCustomBelowMandatory =
+    hasOverdue && paymentOption === 'custom' && Number(customAmount) < mandatoryOverdueTotal;
+
   const allocations = isPayAll ? allocatePayAllAmount(payableAmount, plans) : [];
 
   const handleOpenGateway = () => {
     if (payableAmount <= 0) {
       alert('Payable amount must be greater than ₹0');
+      return;
+    }
+    if (hasOverdue && payableAmount < mandatoryOverdueTotal) {
+      alert(
+        `Account has overdue penalties. A strict minimum payment of ${formatCurrency(
+          mandatoryOverdueTotal
+        )} (Overdue EMI + Late Fee) is required.`
+      );
       return;
     }
     setIsGatewayOpen(true);
@@ -275,7 +325,7 @@ export const PayDuesScreen: React.FC = () => {
 
                 <div className="text-right">
                   <span className="text-[10px] uppercase font-bold text-akr-text-muted tracking-wider block">
-                    Next EMI
+                    Next Weekly EMI
                   </span>
                   <div className="text-sm font-bold text-akr-gold">
                     {nextEmiAmount > 0 ? formatCurrency(nextEmiAmount) : 'No EMI'}
@@ -284,6 +334,29 @@ export const PayDuesScreen: React.FC = () => {
                     Due {nextEmiDate ? formatDisplayDate(nextEmiDate) : 'N/A'}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Overdue Notice Banner if account is past due or has late penalty */}
+          {hasOverdue && (
+            <div className="p-4 rounded-card bg-red-950/40 border-2 border-red-500/60 shadow-lg text-left space-y-2.5">
+              <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 animate-pulse text-red-400" />
+                <span>Overdue Weekly Payment Notice • Strict Payment Enforced</span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                Your Weekly EMI payment is past due by <strong className="text-white font-bold">{totalMissedWeeks} week(s)</strong>.
+                {totalLateFee > 0 && (
+                  <> An administrative late fee penalty of <strong className="text-red-400 font-bold">{formatCurrency(totalLateFee)}</strong> has been levied.</>
+                )}
+                {' '}To regularize your account and avoid default reporting, you must clear the mandatory minimum of{' '}
+                <strong className="text-akr-gold font-bold">{formatCurrency(mandatoryOverdueTotal)}</strong>.
+              </p>
+              <div className="bg-black/50 rounded-xl p-2.5 text-[11px] font-mono flex flex-wrap items-center justify-between gap-1 text-zinc-300 border border-red-500/30">
+                <span>Base Weekly EMI ({totalMissedWeeks} wk): {formatCurrency(overdueBaseEmi + nonOverdueEmi)}</span>
+                <span className="text-red-400 font-semibold">+ Late Fee: {formatCurrency(totalLateFee)}</span>
+                <span className="text-akr-gold font-extrabold">= Mandatory Min: {formatCurrency(mandatoryOverdueTotal)}</span>
               </div>
             </div>
           )}
@@ -309,30 +382,41 @@ export const PayDuesScreen: React.FC = () => {
                 Pay All Dues ({plans.length})
               </button>
 
-              {plans.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setSelectedPlanId(p.id)}
-                  className={`
-                    px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border
-                    ${
-                      selectedPlanId === p.id
-                        ? 'bg-akr-gold text-black border-akr-gold shadow-gold-glow'
-                        : 'bg-akr-surface text-zinc-300 border-akr-border hover:border-akr-gold/40'
-                    }
-                  `}
-                >
-                  {p.title}
-                </button>
-              ))}
+              {plans.map((p) => {
+                const planIsOverdue = isPlanOverdue(p);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPlanId(p.id)}
+                    className={`
+                      px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-1.5
+                      ${
+                        selectedPlanId === p.id
+                          ? 'bg-akr-gold text-black border-akr-gold shadow-gold-glow'
+                          : planIsOverdue
+                          ? 'bg-red-950/30 text-red-300 border-red-800/60 hover:border-red-500'
+                          : 'bg-akr-surface text-zinc-300 border-akr-border hover:border-akr-gold/40'
+                      }
+                    `}
+                  >
+                    {planIsOverdue && <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />}
+                    <span>{p.title}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Payment Breakdown Card (Phone 3 in template - Always adds up!) */}
+          {/* Payment Breakdown Card (Always adds up!) */}
           <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 text-left">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-3">
-              Payment Breakdown
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span>Payment Breakdown</span>
+              {hasOverdue && (
+                <span className="text-[10px] text-red-400 bg-red-950/60 px-2 py-0.5 rounded font-mono border border-red-800/40">
+                  Late Fee Included
+                </span>
+              )}
             </h4>
 
             {isPayAll ? (
@@ -345,6 +429,12 @@ export const PayDuesScreen: React.FC = () => {
                     </span>
                   </div>
                 ))}
+                {totalLateFee > 0 && (
+                  <div className="flex justify-between items-center text-red-400 pt-1 font-mono">
+                    <span>Admin Late Penalties</span>
+                    <span className="font-bold">+{formatCurrency(totalLateFee)}</span>
+                  </div>
+                )}
                 <div className="pt-2.5 mt-2 border-t border-akr-border flex justify-between items-center font-bold text-sm">
                   <span className="text-white">Total Allocated</span>
                   <span className="text-akr-gold">{formatCurrency(payableAmount)}</span>
@@ -353,15 +443,15 @@ export const PayDuesScreen: React.FC = () => {
             ) : currentPlan ? (
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between items-center text-zinc-300">
-                  <span>Principal Amount</span>
+                  <span>Product Principal Amount</span>
                   <span className="font-semibold text-white">
                     {formatCurrency(currentPlan.principal)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-zinc-300">
-                  <span>Interest</span>
-                  <span className="font-semibold text-white">
-                    {formatCurrency(currentPlan.interest)}
+                  <span>Interest (0% Retail APR)</span>
+                  <span className="font-semibold text-emerald-400">
+                    {currentPlan.interest > 0 ? formatCurrency(currentPlan.interest) : '₹0 (Interest Free)'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-zinc-300">
@@ -370,6 +460,18 @@ export const PayDuesScreen: React.FC = () => {
                     {formatCurrency(currentPlan.processingFee)}
                   </span>
                 </div>
+                <div className="flex justify-between items-center text-zinc-300">
+                  <span>Tenure</span>
+                  <span className="font-semibold text-white">
+                    {currentPlan.tenureWeeks || currentPlan.totalEmis} Weeks
+                  </span>
+                </div>
+                {Boolean(currentPlan.overdueAmount && currentPlan.overdueAmount > 0) && (
+                  <div className="flex justify-between items-center text-red-400 font-mono bg-red-950/30 px-2 py-1 rounded border border-red-500/20">
+                    <span>Overdue Penalty ({currentPlan.missedWeeks || currentPlan.missedMonths || 1} wk late)</span>
+                    <span className="font-bold">+{formatCurrency(currentPlan.overdueAmount || 0)}</span>
+                  </div>
+                )}
                 <div className="pt-2.5 mt-2 border-t border-akr-border flex justify-between items-center font-bold text-sm">
                   <span className="text-white">Total Outstanding</span>
                   <span className="text-akr-gold">
@@ -387,7 +489,7 @@ export const PayDuesScreen: React.FC = () => {
             </label>
 
             <div className="space-y-2">
-              {nextEmiAmount > 0 && (
+              {(nextEmiAmount > 0 || hasOverdue) && (
                 <label
                   onClick={() => setPaymentOption('emi')}
                   className={`
@@ -407,10 +509,21 @@ export const PayDuesScreen: React.FC = () => {
                       onChange={() => setPaymentOption('emi')}
                       className="accent-akr-gold"
                     />
-                    <span>Pay Next EMI</span>
+                    <div>
+                      <span>
+                        {hasOverdue
+                          ? `Pay Overdue Weekly EMI (${totalMissedWeeks} wk) + Late Fee`
+                          : 'Pay Next Weekly EMI'}
+                      </span>
+                      {hasOverdue && (
+                        <span className="block text-[10px] text-red-400 font-mono">
+                          Mandatory Overdue Settlement
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <span className="text-sm font-bold text-akr-gold">
-                    {formatCurrency(nextEmiAmount)}
+                    {formatCurrency(hasOverdue ? mandatoryOverdueTotal : nextEmiAmount)}
                   </span>
                 </label>
               )}
@@ -466,18 +579,38 @@ export const PayDuesScreen: React.FC = () => {
                 </div>
 
                 {paymentOption === 'custom' && (
-                  <div className="relative mt-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-akr-gold font-bold">
-                      ₹
-                    </span>
-                    <input
-                      type="number"
-                      placeholder={`Max ${totalOutstanding}`}
-                      value={customAmount}
-                      max={totalOutstanding}
-                      onChange={(e) => setCustomAmount(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2 bg-akr-bg border border-akr-border rounded-lg text-sm text-white focus:border-akr-gold outline-none"
-                    />
+                  <div className="space-y-2 mt-1">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-akr-gold font-bold">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        placeholder={
+                          hasOverdue
+                            ? `Min ${mandatoryOverdueTotal} • Max ${totalOutstanding}`
+                            : `Max ${totalOutstanding}`
+                        }
+                        value={customAmount}
+                        max={totalOutstanding}
+                        onChange={(e) => setCustomAmount(e.target.value)}
+                        className={`w-full pl-8 pr-4 py-2 bg-akr-bg border rounded-lg text-sm text-white outline-none ${
+                          isCustomBelowMandatory
+                            ? 'border-red-500 focus:border-red-500 ring-1 ring-red-500'
+                            : 'border-akr-border focus:border-akr-gold'
+                        }`}
+                      />
+                    </div>
+
+                    {hasOverdue && (
+                      <div className="text-[11px] text-amber-300/90 flex items-start gap-1.5 bg-amber-950/30 p-2 rounded-lg border border-amber-500/20">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400 mt-0.5" />
+                        <span>
+                          <strong>Strict Enforcement:</strong> Accounts with overdue EMIs require a minimum payment of{' '}
+                          <strong>{formatCurrency(mandatoryOverdueTotal)}</strong>. Lesser custom amounts cannot be submitted.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </label>
@@ -577,9 +710,13 @@ export const PayDuesScreen: React.FC = () => {
       <div className="px-4 pt-2">
         <GoldButton
           onClick={handleOpenGateway}
-          disabled={payableAmount <= 0}
+          disabled={payableAmount <= 0 || isCustomBelowMandatory}
         >
-          Pay Now {payableAmount > 0 ? `• ${formatCurrency(payableAmount)}` : ''}
+          {isCustomBelowMandatory
+            ? `Minimum Required: ${formatCurrency(mandatoryOverdueTotal)}`
+            : payableAmount > 0
+            ? `Pay Now • ${formatCurrency(payableAmount)}`
+            : 'Enter Valid Amount'}
         </GoldButton>
 
         {/* Security Notes */}

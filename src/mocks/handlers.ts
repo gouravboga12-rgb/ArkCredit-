@@ -447,8 +447,9 @@ export const handlers = [
     }
 
     const state = useStore.getState();
-    // Return consumers enriched with their dues summary
-    const enriched = state.consumers.map((c) => {
+    // Return ONLY approved consumers (strictly gated by card approval) enriched with their dues summary
+    const approvedConsumers = state.consumers.filter((c) => c.cardApproved === true);
+    const enriched = approvedConsumers.map((c) => {
       const plans = state.duesPlans.filter((p) => p.consumerId === c.id && p.status === 'active');
       const totalOutstanding = calculateTotalOutstanding(plans);
       const nextEmi = getEarliestNextEmi(plans);
@@ -676,6 +677,34 @@ export const handlers = [
     }
 
     return HttpResponse.json({ success: true });
+  }),
+
+  http.post('/api/admin/dues/:id/overdue', async ({ params, request }) => {
+    await handleMiddleware();
+    const token = getAuthHeader(request);
+    if (!token || !token.startsWith('mock_admin_token_')) {
+      return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { id } = params;
+    const body = (await request.json()) as { overdueAmount: number; missedWeeks?: number; missedMonths?: number; remarks?: string };
+    const state = useStore.getState();
+    const adminName = state.adminSession?.admin.name || 'Admin';
+
+    const missedWeeksCount = Number(body.missedWeeks || body.missedMonths || 1);
+    const updated = state.setPlanOverdueFee(
+      id as string,
+      Number(body.overdueAmount || 0),
+      missedWeeksCount,
+      body.remarks || '',
+      adminName
+    );
+
+    if (!updated) {
+      return HttpResponse.json({ error: 'Plan not found' }, { status: 404 });
+    }
+
+    return HttpResponse.json(updated);
   }),
 
   http.post('/api/admin/dues/bulk', async ({ request }) => {

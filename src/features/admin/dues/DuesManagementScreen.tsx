@@ -18,6 +18,10 @@ import {
   Calendar,
   Layers,
   ChevronRight,
+  Clock,
+  ShieldAlert,
+  AlertTriangle,
+  Check,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
@@ -44,6 +48,17 @@ export const DuesManagementScreen: React.FC = () => {
   const [planTypes, setPlanTypes] = useState<PlanType[]>([]);
   const [consumers, setConsumers] = useState<Consumer[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Active Tab: 'all' | 'overdue'
+  const [activeTab, setActiveTab] = useState<'all' | 'overdue'>('all');
+
+  // Overdue Modal State
+  const [overdueTargetPlan, setOverdueTargetPlan] = useState<DuesPlan | null>(null);
+  const [manualOverdueFee, setManualOverdueFee] = useState<number>(250);
+  const [missedWeeks, setMissedWeeks] = useState<number>(1);
+  const [overdueRemarks, setOverdueRemarks] = useState<string>('Payment past due date. Late fee applied.');
+  const [isSavingOverdue, setIsSavingOverdue] = useState<boolean>(false);
+  const [overdueToast, setOverdueToast] = useState<string | null>(null);
 
   const [selectedConsumerId, setSelectedConsumerId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,22 +107,22 @@ export const DuesManagementScreen: React.FC = () => {
   const handleApplyEmiCalculation = (calc: EmiCalculationResult) => {
     setValue('interest', calc.interestAmount);
     setValue('emiAmount', calc.emiAmount);
-    setValue('tenureMonths', calc.tenureMonths);
+    setValue('tenureMonths', calc.tenureWeeks);
     setValue('totalEmis', calc.totalEmis);
     setValue('remainingEmis', calc.remainingEmis);
   };
 
-  const handleQuickDueDate = (type: '30d' | '5th' | '10th') => {
+  const handleQuickDueDate = (type: '7d' | '14d' | '21d' | '30d') => {
     const now = new Date();
     const target = new Date();
-    if (type === '30d') {
+    if (type === '7d') {
+      target.setDate(now.getDate() + 7);
+    } else if (type === '14d') {
+      target.setDate(now.getDate() + 14);
+    } else if (type === '21d') {
+      target.setDate(now.getDate() + 21);
+    } else if (type === '30d') {
       target.setDate(now.getDate() + 30);
-    } else if (type === '5th') {
-      target.setMonth(now.getMonth() + 1);
-      target.setDate(5);
-    } else if (type === '10th') {
-      target.setMonth(now.getMonth() + 1);
-      target.setDate(10);
     }
     setValue('nextEmiDate', target.toISOString().split('T')[0]);
   };
@@ -187,7 +202,7 @@ export const DuesManagementScreen: React.FC = () => {
     setValue('nextEmiDate', plan.nextEmiDate);
     setValue('totalEmis', plan.totalEmis);
     setValue('remainingEmis', plan.remainingEmis);
-    setValue('tenureMonths', plan.tenureMonths);
+    setValue('tenureMonths', plan.tenureWeeks || plan.tenureMonths || plan.totalEmis || 12);
     setValue('linkedCardTypeId', plan.linkedCardTypeId || '');
     setIsPlanModalOpen(true);
   };
@@ -352,8 +367,53 @@ export const DuesManagementScreen: React.FC = () => {
     }
   };
 
+  const calculateDaysOverdue = (dateStr?: string) => {
+    if (!dateStr) return 0;
+    const d = new Date(dateStr);
+    const now = new Date();
+    const dateDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diff = Math.floor((todayDay.getTime() - dateDay.getTime()) / (1000 * 3600 * 24));
+    return Math.max(0, diff);
+  };
+
+  // Overdue plans: active with outstanding balance that crossed due date by 1+ days or already have overdue fees
+  const overduePlans = plans.filter((p) => {
+    if (p.status !== 'active' || p.outstandingAmount <= 0) return false;
+    const days = calculateDaysOverdue(p.nextEmiDate);
+    return days >= 1 || (p.overdueAmount && p.overdueAmount > 0);
+  });
+
+  const openOverdueModal = (plan: DuesPlan) => {
+    setOverdueTargetPlan(plan);
+    setManualOverdueFee(plan.overdueAmount || 250);
+    setMissedWeeks(plan.missedWeeks || plan.missedMonths || 1);
+    setOverdueRemarks(plan.overdueRemarks || 'Payment past due date. Late fee applied.');
+  };
+
+  const handleSaveOverdueFee = async () => {
+    if (!overdueTargetPlan) return;
+    try {
+      setIsSavingOverdue(true);
+      await adminApi.setPlanOverdueFee(overdueTargetPlan.id, {
+        overdueAmount: Number(manualOverdueFee),
+        missedWeeks: Number(missedWeeks),
+        missedMonths: Number(missedWeeks),
+        remarks: overdueRemarks,
+      });
+      setOverdueToast(`Overdue late fee of ₹${Number(manualOverdueFee).toLocaleString('en-IN')} updated for "${overdueTargetPlan.title}"!`);
+      setOverdueTargetPlan(null);
+      await loadData();
+      setTimeout(() => setOverdueToast(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Error updating overdue fee');
+    } finally {
+      setIsSavingOverdue(false);
+    }
+  };
+
   // Filter plans
-  const filteredPlans = plans.filter((p) => {
+  const filteredPlans = (activeTab === 'overdue' ? overduePlans : plans).filter((p) => {
     if (selectedConsumerId !== 'all' && p.consumerId !== selectedConsumerId) {
       return false;
     }
@@ -369,7 +429,15 @@ export const DuesManagementScreen: React.FC = () => {
   });
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 space-y-6 text-left selection:bg-akr-gold selection:text-black">
+    <div className="space-y-6">
+      {/* Toast Feedback */}
+      {overdueToast && (
+        <div className="fixed top-5 right-5 z-50 p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-600/80 text-emerald-200 text-xs font-semibold shadow-2xl flex items-center gap-2 animate-bounce">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{overdueToast}</span>
+        </div>
+      )}
+
       {/* Top Header & Bulk Upload Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
         <div>
@@ -377,7 +445,7 @@ export const DuesManagementScreen: React.FC = () => {
             Consumer Dues & EMI Management
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Maintain individualized EMI schedules, assign multiple dues plans, and execute bulk CSV updates.
+            Maintain individualized EMI schedules, assign multiple dues plans, and track overdue accounts.
           </p>
         </div>
 
@@ -396,6 +464,55 @@ export const DuesManagementScreen: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Tab Navigation: All Plans vs Overdue Tracker */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab('all')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'all'
+              ? 'bg-akr-gold text-black shadow-md'
+              : 'bg-[#141417] text-zinc-400 hover:text-white border border-zinc-800'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>All Active Dues Plans</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-black/20 text-current font-mono">
+            {plans.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('overdue')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'overdue'
+              ? 'bg-red-500 text-white shadow-md'
+              : 'bg-[#181212] text-red-300 hover:bg-red-950/60 border border-red-500/30'
+          }`}
+        >
+          <ShieldAlert className="w-3.5 h-3.5 text-red-400 animate-pulse" />
+          <span>⚠️ Overdue Accounts & Late Fees</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-red-600 text-white font-mono font-bold animate-pulse">
+            {overduePlans.length} Overdue
+          </span>
+        </button>
+      </div>
+
+      {/* Overdue Section Explanatory Alert Banner */}
+      {activeTab === 'overdue' && (
+        <div className="p-4 rounded-xl bg-red-950/40 border border-red-600/40 flex items-start gap-3 text-xs text-red-200">
+          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1 text-left">
+            <h4 className="font-bold text-white text-sm">Overdue Accounts & Manual Late Fee Management</h4>
+            <p className="text-zinc-300">
+              The accounts below have crossed their scheduled EMI due date by 1 or more days. As an Admin, you can assign an overdue late fee penalty and specify whether 1 or 2 months are missed.
+              Once saved, the penalty updates dynamically in the customer's portal and enforces a strict, non-negotiable payment total without partial discounts.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filter Row: Consumer Dropdown & Search */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -420,7 +537,11 @@ export const DuesManagementScreen: React.FC = () => {
           <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by plan title, reference (e.g. LN-2024-8842), or consumer..."
+            placeholder={
+              activeTab === 'overdue'
+                ? "Search overdue borrowers, references, or phone..."
+                : "Search by plan title, reference (e.g. LN-2024-8842), or consumer..."
+            }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-[#141417] border border-zinc-800 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:border-akr-gold outline-none"
@@ -456,6 +577,15 @@ export const DuesManagementScreen: React.FC = () => {
           <Skeleton className="h-12 w-full rounded-xl" />
           <Skeleton className="h-12 w-full rounded-xl" />
         </div>
+      ) : filteredPlans.length === 0 ? (
+        <div className="p-12 text-center rounded-2xl bg-[#141417] border border-zinc-800 text-zinc-400">
+          <Layers className="w-10 h-10 mx-auto text-zinc-600 mb-2" />
+          <p className="text-sm font-semibold">
+            {activeTab === 'overdue'
+              ? 'No accounts currently overdue! All active EMI payments are on schedule.'
+              : 'No dues plans found matching criteria.'}
+          </p>
+        </div>
       ) : (
         <>
           {/* Desktop Table View */}
@@ -467,47 +597,148 @@ export const DuesManagementScreen: React.FC = () => {
                     <th className="py-3 px-4">Plan Title & Reference</th>
                     <th className="py-3 px-4">Consumer</th>
                     <th className="py-3 px-4">Outstanding</th>
-                    <th className="py-3 px-4">Breakdown (P + I + Fee)</th>
-                    <th className="py-3 px-4">EMI Amount</th>
-                    <th className="py-3 px-4">Next Due Date</th>
-                    <th className="py-3 px-4">EMIs Left</th>
-                    <th className="py-3 px-4">Status</th>
+                    {activeTab === 'overdue' ? (
+                      <>
+                        <th className="py-3 px-4">Due Date & Delay</th>
+                        <th className="py-3 px-4">Missed Tenure</th>
+                        <th className="py-3 px-4">Regular EMI</th>
+                        <th className="py-3 px-4">Late Fee Penalty</th>
+                        <th className="py-3 px-4">Total Mandatory Payable</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="py-3 px-4">Breakdown (P + I + Fee)</th>
+                        <th className="py-3 px-4">EMI Amount</th>
+                        <th className="py-3 px-4">Next Due Date</th>
+                        <th className="py-3 px-4">EMIs Left</th>
+                        <th className="py-3 px-4">Status</th>
+                      </>
+                    )}
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80">
                   {filteredPlans.map((p) => {
                     const consumer = consumers.find((c) => c.id === p.consumerId);
+                    const daysOverdue = calculateDaysOverdue(p.nextEmiDate);
+                    const isOverdue = daysOverdue >= 1;
+                    const missedWeeksCount = p.missedWeeks || p.missedMonths || 1;
+                    const mandatoryPayable =
+                      (p.emiAmount * missedWeeksCount) + (p.overdueAmount || 0);
+
                     return (
-                      <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
+                      <tr
+                        key={p.id}
+                        className={`hover:bg-zinc-800/40 transition-colors ${
+                          isOverdue ? 'bg-red-950/10' : ''
+                        }`}
+                      >
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-white">{p.title}</div>
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span>{p.title}</span>
+                            {isOverdue && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+                                Overdue
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[10px] font-mono text-zinc-400">{p.referenceNumber}</div>
                         </td>
+
                         <td className="py-3.5 px-4">
                           <div className="font-semibold text-zinc-200">{consumer?.name || '-'}</div>
                           <div className="text-[10px] font-mono text-zinc-500">{consumer?.accountNumber}</div>
+                          {consumer?.mobile && (
+                            <div className="text-[10px] text-zinc-400">{consumer.mobile}</div>
+                          )}
                         </td>
+
                         <td className="py-3.5 px-4 font-bold text-akr-gold text-sm">
                           {formatCurrency(p.outstandingAmount)}
                         </td>
-                        <td className="py-3.5 px-4 text-zinc-300 font-mono text-[11px]">
-                          ₹{p.principal.toLocaleString('en-IN')} + ₹{p.interest.toLocaleString('en-IN')} + ₹{p.processingFee.toLocaleString('en-IN')}
-                        </td>
-                        <td className="py-3.5 px-4 font-bold text-white">
-                          {p.emiAmount > 0 ? formatCurrency(p.emiAmount) : 'None'}
-                        </td>
-                        <td className="py-3.5 px-4 text-zinc-300">
-                          {p.nextEmiDate ? formatDisplayDate(p.nextEmiDate) : 'N/A'}
-                        </td>
-                        <td className="py-3.5 px-4 text-zinc-300">
-                          {p.remainingEmis} / {p.totalEmis}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <StatusBadge status={p.status === 'active' ? 'Active' : 'Closed'} size="sm" />
-                        </td>
+
+                        {activeTab === 'overdue' ? (
+                          <>
+                            <td className="py-3.5 px-4">
+                              <span className="font-medium text-white block">
+                                {p.nextEmiDate ? formatDisplayDate(p.nextEmiDate) : 'N/A'}
+                              </span>
+                              <span className="text-[10px] font-bold text-red-400">
+                                {daysOverdue} days past due
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-800 text-amber-300 border border-zinc-700">
+                                {missedWeeksCount === 2 ? '2 Weeks Missed' : `${missedWeeksCount} Week${missedWeeksCount > 1 ? 's' : ''} Missed`}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 font-mono text-zinc-200">
+                              {formatCurrency(p.emiAmount)}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              {p.overdueAmount && p.overdueAmount > 0 ? (
+                                <span className="font-bold text-red-400 font-mono">
+                                  + {formatCurrency(p.overdueAmount)}
+                                </span>
+                              ) : (
+                                <span className="text-zinc-500 text-[11px] italic">Not set</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span className="font-bold text-emerald-400 text-sm font-mono block">
+                                {formatCurrency(mandatoryPayable)}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 block">Strict (No discounts)</span>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-3.5 px-4 text-zinc-300 font-mono text-[11px]">
+                              ₹{p.principal.toLocaleString('en-IN')} + ₹{p.interest.toLocaleString('en-IN')} + ₹{p.processingFee.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-white">
+                              {p.emiAmount > 0 ? formatCurrency(p.emiAmount) : 'None'}
+                              {p.overdueAmount && p.overdueAmount > 0 ? (
+                                <span className="text-[10px] text-red-400 block font-normal">
+                                  + {formatCurrency(p.overdueAmount)} late fee
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="py-3.5 px-4 text-zinc-300">
+                              {p.nextEmiDate ? formatDisplayDate(p.nextEmiDate) : 'N/A'}
+                              {isOverdue && (
+                                <span className="text-[10px] text-red-400 block font-semibold">
+                                  ({daysOverdue}d overdue)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-zinc-300">
+                              {p.remainingEmis} / {p.totalEmis}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <StatusBadge status={p.status === 'active' ? 'Active' : 'Closed'} size="sm" />
+                            </td>
+                          </>
+                        )}
+
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Overdue Action Button */}
+                            {isOverdue && (
+                              <button
+                                onClick={() => openOverdueModal(p)}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-500/20 text-red-300 hover:bg-red-500 hover:text-white border border-red-500/40 transition-all flex items-center gap-1 cursor-pointer"
+                                title="Levy / Edit Overdue Penalty"
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{p.overdueAmount ? 'Edit Overdue' : 'Levy Late Fee'}</span>
+                              </button>
+                            )}
+
                             <button
                               onClick={() => openEditPlan(p)}
                               className="p-1.5 rounded-lg text-zinc-400 hover:text-akr-gold hover:bg-zinc-800"
@@ -594,6 +825,15 @@ export const DuesManagementScreen: React.FC = () => {
 
                   {/* Action Controls */}
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                    {calculateDaysOverdue(p.nextEmiDate) >= 1 && (
+                      <button
+                        onClick={() => openOverdueModal(p)}
+                        className="px-2.5 py-1.5 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500 hover:text-white border border-red-500/40 text-xs font-bold flex items-center gap-1 transition-colors"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{p.overdueAmount ? 'Edit Late Fee' : 'Levy Late Fee'}</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => openEditPlan(p)}
                       className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -645,23 +885,23 @@ export const DuesManagementScreen: React.FC = () => {
           </div>
 
           <InputField
-            label="Plan Title"
-            placeholder="e.g. Personal Loan EMI"
+            label="Product / Item Name *"
+            placeholder="e.g. Kanchipuram Silk Bridal Saree"
             error={errors.title?.message}
             {...register('title')}
           />
 
           <InputField
             label="Reference Number"
-            placeholder="e.g. LN-2026-8812"
+            placeholder="e.g. SAR-2026-8812"
             error={errors.referenceNumber?.message}
             {...register('referenceNumber')}
           />
 
-          {/* Base Loan Principal & Fee */}
+          {/* Base Product Price & Fee */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <InputField
-              label="Principal Amount (₹) *"
+              label="Product Price / Principal (₹) *"
               type="number"
               placeholder="10000"
               error={errors.principal?.message}
@@ -670,7 +910,7 @@ export const DuesManagementScreen: React.FC = () => {
             <InputField
               label="Processing Fee (₹) *"
               type="number"
-              placeholder="500"
+              placeholder="0"
               error={errors.processingFee?.message}
               {...register('processingFee')}
             />
@@ -682,7 +922,7 @@ export const DuesManagementScreen: React.FC = () => {
             processingFee={processingFee}
             onApplyCalculation={handleApplyEmiCalculation}
             defaultTenure={12}
-            defaultInterestRate={12}
+            defaultInterestRate={0}
           />
 
           {/* Synced Breakdown & Installment Terms */}
@@ -704,7 +944,7 @@ export const DuesManagementScreen: React.FC = () => {
                 {...register('interest')}
               />
               <InputField
-                label="Monthly EMI (₹) *"
+                label="Weekly EMI (₹) *"
                 type="number"
                 error={errors.emiAmount?.message}
                 {...register('emiAmount')}
@@ -721,30 +961,30 @@ export const DuesManagementScreen: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-bold text-zinc-400 uppercase">
-                  First EMI Due Date *
+                  First Weekly EMI Due Date *
                 </label>
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] text-zinc-500 mr-1">Quick Set:</span>
                   <button
                     type="button"
-                    onClick={() => handleQuickDueDate('30d')}
+                    onClick={() => handleQuickDueDate('7d')}
                     className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded transition-colors"
                   >
-                    +30 Days
+                    +7 Days (1 Wk)
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleQuickDueDate('5th')}
+                    onClick={() => handleQuickDueDate('14d')}
                     className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded transition-colors"
                   >
-                    5th Next Mo
+                    +14 Days (2 Wks)
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleQuickDueDate('10th')}
+                    onClick={() => handleQuickDueDate('21d')}
                     className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded transition-colors"
                   >
-                    10th Next Mo
+                    +21 Days (3 Wks)
                   </button>
                 </div>
               </div>
@@ -758,7 +998,7 @@ export const DuesManagementScreen: React.FC = () => {
             {/* Total EMIs, Remaining, Tenure */}
             <div className="grid grid-cols-3 gap-2.5 pt-1">
               <InputField
-                label="Total EMIs *"
+                label="Total Weekly EMIs *"
                 type="number"
                 error={errors.totalEmis?.message}
                 {...register('totalEmis')}
@@ -770,7 +1010,7 @@ export const DuesManagementScreen: React.FC = () => {
                 {...register('remainingEmis')}
               />
               <InputField
-                label="Tenure (Mo) *"
+                label="Tenure (Weeks) *"
                 type="number"
                 error={errors.tenureMonths?.message}
                 {...register('tenureMonths')}
@@ -904,6 +1144,174 @@ export const DuesManagementScreen: React.FC = () => {
           )}
         </div>
       </Modal>
+      {/* Overdue Penalty Management Modal */}
+      {overdueTargetPlan && (
+        <Modal
+          isOpen={!!overdueTargetPlan}
+          onClose={() => setOverdueTargetPlan(null)}
+          title="Levy Overdue & Late Payment Penalty"
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-left text-xs">
+            {/* Target Account Info */}
+            <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-600/40 text-red-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-white text-sm">{overdueTargetPlan.title}</h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/40">
+                  {calculateDaysOverdue(overdueTargetPlan.nextEmiDate)} Days Past Due
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-300">
+                Borrower: <strong className="text-white">{consumers.find(c => c.id === overdueTargetPlan.consumerId)?.name || 'Consumer'}</strong> ({consumers.find(c => c.id === overdueTargetPlan.consumerId)?.accountNumber})
+                • Ref: {overdueTargetPlan.referenceNumber}
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                Scheduled Due Date: <strong className="text-zinc-200">{formatDisplayDate(overdueTargetPlan.nextEmiDate)}</strong>
+              </p>
+            </div>
+
+            {/* Missed Weeks Tenure */}
+            <div>
+              <label className="block text-xs font-bold text-zinc-300 uppercase mb-1.5">
+                Missed Weekly EMI Tenure *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMissedWeeks(1)}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    missedWeeks === 1
+                      ? 'bg-akr-gold/15 border-akr-gold text-white shadow-sm'
+                      : 'bg-[#18181B] border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <span className="font-bold block text-xs">1 Week Missed</span>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">
+                    Current Weekly EMI ({formatCurrency(overdueTargetPlan.emiAmount)}) + Penalty
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMissedWeeks(2)}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    missedWeeks === 2
+                      ? 'bg-akr-gold/15 border-akr-gold text-white shadow-sm'
+                      : 'bg-[#18181B] border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <span className="font-bold block text-xs">2 Weeks Missed</span>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">
+                    2x Weekly EMIs ({formatCurrency(overdueTargetPlan.emiAmount * 2)}) + Penalty
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Manual Overdue Late Fee Amount */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-zinc-300 uppercase">
+                  Manual Late Fee / Overdue Amount (₹) *
+                </label>
+                <span className="text-[10px] text-akr-gold font-bold">Quick Presets</span>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex items-center gap-1.5 mb-2">
+                {[150, 250, 500, 750, 1000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setManualOverdueFee(amt)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                      manualOverdueFee === amt
+                        ? 'bg-red-500 text-white shadow-sm'
+                        : 'bg-[#18181B] border border-zinc-700 text-zinc-300 hover:border-red-400'
+                    }`}
+                  >
+                    ₹{amt}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="number"
+                min="0"
+                value={manualOverdueFee}
+                onChange={(e) => setManualOverdueFee(Number(e.target.value))}
+                placeholder="250"
+                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3 py-2 text-xs font-mono font-bold outline-none focus:border-red-500"
+              />
+              <span className="text-[10px] text-zinc-500 mt-1 block">
+                Enter the exact overdue fine to be charged to the customer.
+              </span>
+            </div>
+
+            {/* Admin Notes */}
+            <div>
+              <label className="block text-xs font-bold text-zinc-300 uppercase mb-1">
+                Admin Audit Remarks / Reason
+              </label>
+              <textarea
+                rows={2}
+                value={overdueRemarks}
+                onChange={(e) => setOverdueRemarks(e.target.value)}
+                placeholder="e.g. Crossed weekly due date by 7 days. Applied standard late fee."
+                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold resize-none"
+              />
+            </div>
+
+            {/* Live Calculation Preview Box */}
+            <div className="p-3.5 rounded-xl bg-[#121215] border border-zinc-800 space-y-1.5">
+              <span className="text-[10px] uppercase font-bold text-akr-gold tracking-wider block">
+                Total Mandatory Payment Calculation (User Side)
+              </span>
+              <div className="flex justify-between text-xs text-zinc-400">
+                <span>
+                  Missed Weekly EMI ({missedWeeks} {missedWeeks > 1 ? 'weeks' : 'week'} x {formatCurrency(overdueTargetPlan.emiAmount)}):
+                </span>
+                <span className="font-mono text-white">
+                  {formatCurrency(overdueTargetPlan.emiAmount * missedWeeks)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-zinc-400">
+                <span>Manual Overdue Penalty / Late Fee:</span>
+                <span className="font-mono text-red-400 font-bold">
+                  + {formatCurrency(Number(manualOverdueFee) || 0)}
+                </span>
+              </div>
+              <div className="pt-1.5 border-t border-zinc-800 flex justify-between items-center text-sm">
+                <span className="font-bold text-white">Total Non-Negotiable Payable:</span>
+                <span className="font-bold font-mono text-emerald-400 text-base">
+                  {formatCurrency((overdueTargetPlan.emiAmount * missedWeeks) + (Number(manualOverdueFee) || 0))}
+                </span>
+              </div>
+              <span className="text-[10px] text-zinc-500 italic block pt-1">
+                • User cannot edit or pay less than this amount. Discounts and partial payments are locked out.
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setOverdueTargetPlan(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <GoldButton
+                onClick={handleSaveOverdueFee}
+                isLoading={isSavingOverdue}
+                className="bg-red-500 hover:bg-red-600 text-white font-bold"
+              >
+                Save & Enforce Late Fee
+              </GoldButton>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

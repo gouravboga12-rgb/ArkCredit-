@@ -67,12 +67,6 @@ export const AdminLayout: React.FC = () => {
       superOnly: false,
     },
     {
-      label: 'Card Types',
-      path: '/admin/cards',
-      icon: CreditCard,
-      superOnly: false,
-    },
-    {
       label: 'Card Requests',
       path: '/admin/card-requests',
       icon: FileText,

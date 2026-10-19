@@ -38,6 +38,8 @@ export const CardRequestsScreen: React.FC = () => {
   const [cardTierFilter, setCardTierFilter] = useState<string>('all');
   const [datePreset, setDatePreset] = useState<string>('all'); // 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
   const [customDate, setCustomDate] = useState<string>('');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
 
   // Modals
   const [viewingRequest, setViewingRequest] = useState<CardRequest | null>(null);
@@ -46,7 +48,7 @@ export const CardRequestsScreen: React.FC = () => {
   const [previewDocUrl, setPreviewDocUrl] = useState<{ name: string; url: string } | null>(null);
 
   // Approval Form
-  const [creditLimit, setCreditLimit] = useState<number>(150000);
+  const [creditLimit, setCreditLimit] = useState<number>(50000);
   const [adminRemarks, setAdminRemarks] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -109,8 +111,10 @@ export const CardRequestsScreen: React.FC = () => {
       } else if (datePreset === 'month') {
         const currentMonthIST = todayIST.slice(0, 7); // YYYY-MM
         if (reqDateIST.slice(0, 7) !== currentMonthIST) return false;
-      } else if (datePreset === 'custom' && customDate) {
-        if (reqDateIST !== customDate) return false;
+      } else if (datePreset === 'custom') {
+        if (customDate && reqDateIST !== customDate) return false;
+        if (fromDate && reqDateIST < fromDate) return false;
+        if (toDate && reqDateIST > toDate) return false;
       }
 
       // 4. Search Filter
@@ -128,7 +132,7 @@ export const CardRequestsScreen: React.FC = () => {
 
       return true;
     });
-  }, [requests, statusFilter, cardTierFilter, datePreset, customDate, searchQuery, todayIST]);
+  }, [requests, statusFilter, datePreset, customDate, fromDate, toDate, searchQuery, todayIST]);
 
   // Status counts for top summary cards
   const stats = useMemo(() => {
@@ -309,13 +313,34 @@ export const CardRequestsScreen: React.FC = () => {
 
           {/* Custom Date Input */}
           {datePreset === 'custom' && (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
-                className="bg-[#18181B] border border-akr-gold text-white rounded-lg px-2.5 py-1 text-xs outline-none font-mono"
-              />
+            <div className="flex flex-wrap items-center gap-2.5 p-2 rounded-lg bg-[#121215] border border-zinc-700/80">
+              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <span>From:</span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="bg-[#18181B] border border-zinc-700 text-white rounded-lg px-2 py-1 text-xs outline-none font-mono focus:border-akr-gold"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <span>To:</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="bg-[#18181B] border border-zinc-700 text-white rounded-lg px-2 py-1 text-xs outline-none font-mono focus:border-akr-gold"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <span>Or Day:</span>
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  className="bg-[#18181B] border border-akr-gold/60 text-white rounded-lg px-2 py-1 text-xs outline-none font-mono"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -859,18 +884,40 @@ export const CardRequestsScreen: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
-                Approved Credit Limit (₹) *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-zinc-400 uppercase">
+                  Approved Credit Limit (₹) *
+                </label>
+                <span className="text-[10px] text-akr-gold font-bold">Quick Presets</span>
+              </div>
+
+              {/* Quick Limit Preset Chips */}
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {[20000, 30000, 40000, 50000, 100000].map((presetAmt) => (
+                  <button
+                    key={presetAmt}
+                    type="button"
+                    onClick={() => setCreditLimit(presetAmt)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                      creditLimit === presetAmt
+                        ? 'bg-akr-gold text-black shadow-sm'
+                        : 'bg-[#18181B] border border-zinc-700 text-zinc-300 hover:border-akr-gold'
+                    }`}
+                  >
+                    ₹{presetAmt.toLocaleString('en-IN')}
+                  </button>
+                ))}
+              </div>
+
               <input
                 type="number"
                 value={creditLimit}
                 onChange={(e) => setCreditLimit(Number(e.target.value))}
-                placeholder="150000"
+                placeholder="50000"
                 className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-xs outline-none focus:border-akr-gold font-mono font-bold"
               />
               <span className="text-[10px] text-zinc-500 mt-0.5 block">
-                Recommended limit based on reported income: ₹{((approvingRequest.monthlyIncome || 50000) * 3).toLocaleString('en-IN')}
+                Assign a limit between ₹20,000 and ₹1,00,000 based on applicant profile.
               </span>
             </div>
 

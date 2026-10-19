@@ -231,28 +231,29 @@ describe('Financial Domain Calculations & Business Rules', () => {
       id: 'plan_test',
       consumerId: 'c1',
       planTypeId: 'pt1',
-      title: 'Bike Loan',
+      title: 'Bridal Silk Saree EMI',
       referenceNumber: 'REF_TEST',
       status: 'active',
       outstandingAmount: 6000,
       totalPaymentDue: 12000,
-      principal: 5400,
-      interest: 600,
+      principal: 6000,
+      interest: 0,
       processingFee: 0,
       emiAmount: 2000,
       nextEmiDate: '2026-10-25',
+      frequency: 'weekly',
       totalEmis: 6,
       remainingEmis: 3,
-      tenureMonths: 6,
+      tenureWeeks: 6,
       createdAt: '',
       updatedAt: '',
     };
 
-    // 1. Partial EMI payment of ₹2,000
+    // 1. Partial EMI payment of ₹2,000 (advances by 1 week: 2026-10-25 + 7d = 2026-11-01)
     const after1 = applyPaymentToPlan(plan, 2000, true);
     expect(after1.outstandingAmount).toBe(4000);
     expect(after1.remainingEmis).toBe(2);
-    expect(after1.nextEmiDate).toBe('2026-11-25');
+    expect(after1.nextEmiDate).toBe('2026-11-01');
     expect(after1.status).toBe('active');
 
     // 2. Full remaining payment of ₹4,000 -> Closes plan
@@ -294,5 +295,13 @@ describe('Financial Domain Calculations & Business Rules', () => {
     expect(determineDueStatus([dueSoonPlan], true, refDate)).toBe('Due Soon');
     expect(determineDueStatus([], true, refDate)).toBe('Clear');
     expect(determineDueStatus([dueSoonPlan], false, refDate)).toBe('Inactive');
+
+    // Overdue late fee penalty assigned by Admin also marks status as Overdue
+    const planWithLateFee: DuesPlan = {
+      ...dueSoonPlan,
+      overdueAmount: 250,
+      missedMonths: 1,
+    };
+    expect(determineDueStatus([planWithLateFee], true, refDate)).toBe('Overdue');
   });
 });

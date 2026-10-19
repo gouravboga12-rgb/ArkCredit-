@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layers, Plus, Edit, CheckCircle, XCircle, Landmark, CreditCard, Receipt, Wallet } from 'lucide-react';
+import { Layers, Plus, Edit, CheckCircle, XCircle, Landmark, CreditCard, Receipt, Wallet, ShoppingBag, Sparkles } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { PlanType, PlanCategory } from '../../../core/types';
 import { Modal, InputField, GoldButton, StatusBadge } from '../../../components/ui';
@@ -82,6 +82,10 @@ export const PlanTypesScreen: React.FC = () => {
 
   const getIcon = (iconName: string) => {
     switch (iconName) {
+      case 'shopping-bag':
+        return <ShoppingBag className="w-5 h-5 text-akr-gold" />;
+      case 'sparkles':
+        return <Sparkles className="w-5 h-5 text-akr-gold" />;
       case 'credit-card':
         return <CreditCard className="w-5 h-5 text-akr-gold" />;
       case 'receipt':
@@ -180,10 +184,11 @@ export const PlanTypesScreen: React.FC = () => {
               onChange={(e) => setCategory(e.target.value as PlanCategory)}
               className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold"
             >
-              <option value="LOAN_EMI">LOAN_EMI</option>
-              <option value="CARD_EMI">CARD_EMI</option>
-              <option value="CARD_BILL">CARD_BILL</option>
-              <option value="OTHER">OTHER</option>
+              <option value="SAREE_EMI">SAREE_EMI (Bridal & Silk Sarees)</option>
+              <option value="PRODUCT_PURCHASE">PRODUCT_PURCHASE (Handloom & Apparel)</option>
+              <option value="RETAIL_PURCHASE">RETAIL_PURCHASE (Jewellery & Accessories)</option>
+              <option value="CUSTOM_STORE">CUSTOM_STORE (Store Retail Purchase)</option>
+              <option value="OTHER">OTHER (Other Retail Dues)</option>
             </select>
           </div>
 
@@ -196,10 +201,11 @@ export const PlanTypesScreen: React.FC = () => {
               onChange={(e) => setIcon(e.target.value)}
               className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold"
             >
-              <option value="landmark">Landmark (Loan)</option>
-              <option value="credit-card">Credit Card (Card EMI)</option>
-              <option value="receipt">Receipt (Bill)</option>
-              <option value="wallet">Wallet (Other Dues)</option>
+              <option value="shopping-bag">Shopping Bag (Sarees / Products)</option>
+              <option value="sparkles">Sparkles (Designer / Luxury Wear)</option>
+              <option value="wallet">Wallet (Retail Accessories)</option>
+              <option value="credit-card">Credit Card (EMI Card)</option>
+              <option value="landmark">Landmark (Store)</option>
             </select>
           </div>
 

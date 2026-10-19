@@ -6,7 +6,15 @@
 export type UserType = 'consumer' | 'admin';
 export type AdminRole = 'super_admin' | 'staff';
 
-export type PlanCategory = 'LOAN_EMI' | 'CARD_EMI' | 'CARD_BILL' | 'OTHER';
+export type PlanCategory = 
+  | 'PRODUCT_PURCHASE'
+  | 'SAREE_EMI'
+  | 'RETAIL_PURCHASE'
+  | 'CUSTOM_STORE'
+  | 'LOAN_EMI' 
+  | 'CARD_EMI' 
+  | 'CARD_BILL' 
+  | 'OTHER';
 export type PlanStatus = 'active' | 'closed';
 
 export type PaymentMode = 
@@ -32,6 +40,10 @@ export interface Consumer {
   status: 'active' | 'inactive';
   passwordHash: string; // mock
   createdAt: string;
+  cardApproved?: boolean; // Only approved users appear in admin consumers page
+  creditLimit?: number; // Credit limit assigned by admin e.g. 50000
+  cardStatus?: 'not_applied' | 'pending' | 'approved' | 'rejected';
+  cardNumber?: string; // Formatted masked card number e.g. '5123 •••• •••• 8842'
   notificationPreferences?: {
     pushEnabled: boolean;
     smsEnabled: boolean;
@@ -53,7 +65,7 @@ export interface PlanType {
   id: string;
   name: string;
   category: PlanCategory;
-  icon: string; // Lucide icon identifier e.g. 'landmark', 'credit-card', 'receipt', 'wallet'
+  icon: string; // Lucide icon identifier e.g. 'landmark', 'credit-card', 'receipt', 'wallet', 'shopping-bag'
   enabled: boolean;
 }
 
@@ -65,16 +77,24 @@ export interface DuesPlan {
   referenceNumber: string;
   status: PlanStatus;
   outstandingAmount: number;
-  totalPaymentDue: number; // total original loan / bill amount
+  totalPaymentDue: number; // total product purchase amount
   principal: number;
-  interest: number;
+  interest: number; // 0 for on-time weekly EMIs
   processingFee: number;
-  emiAmount: number;
+  emiAmount: number; // Weekly EMI amount
   nextEmiDate: string; // ISO date 'YYYY-MM-DD'
-  totalEmis: number;
-  remainingEmis: number;
-  tenureMonths: number;
+  totalEmis: number; // Total number of weekly EMIs
+  remainingEmis: number; // Remaining weekly EMIs
+  tenureWeeks?: number; // Tenure in weeks (e.g. 6, 10, 12)
+  tenureMonths?: number; // Deprecated, kept for backward compatibility
+  frequency?: 'weekly' | 'monthly'; // 'weekly' by default
+  productName?: string; // e.g. "Kanchipuram Silk Bridal Saree"
   linkedCardTypeId?: string;
+  overdueAmount?: number; // Manual late fee / overdue charge entered by Admin
+  missedWeeks?: number; // Count of missed weekly EMIs (1, 2, etc.)
+  missedMonths?: number; // Deprecated, kept for backward compatibility
+  overdueRemarks?: string; // Admin note for overdue fee
+  overdueAssignedAt?: string; // Timestamp when overdue fee was assigned
   createdAt: string;
   updatedAt: string;
 }

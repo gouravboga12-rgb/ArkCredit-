@@ -141,6 +141,16 @@ export const HomeScreen: React.FC = () => {
             nextEmiAmount={duesData?.nextEmiAmount || 0}
             nextEmiDate={duesData?.nextEmiDate || ''}
             isDueSoon={duesData?.isDueSoon || false}
+            isOverdue={Boolean(
+              duesData?.plans.some(
+                (p) =>
+                  (p.overdueAmount || 0) > 0 ||
+                  (p.nextEmiDate && new Date(p.nextEmiDate) < new Date() && p.outstandingAmount > 0)
+              )
+            )}
+            overdueAmount={
+              duesData?.plans.reduce((sum, p) => sum + (p.overdueAmount || 0), 0) || 0
+            }
             onPayClick={() => navigate('/app/pay')}
           />
         )}
@@ -149,7 +159,7 @@ export const HomeScreen: React.FC = () => {
         <div className="text-left space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs uppercase tracking-wider font-bold text-akr-text-muted flex items-center gap-1.5">
-              <span>Due EMI Payments</span>
+              <span>Weekly EMI Payments</span>
               <span className="text-[10px] bg-emerald-500/15 text-emerald-400 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
                 {duesData?.plans.length || 0} Pending
               </span>

@@ -175,7 +175,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'cards',
-        element: <CardManagementScreen />,
+        element: <Navigate to="/admin/card-requests" replace />,
       },
       {
         path: 'card-requests',

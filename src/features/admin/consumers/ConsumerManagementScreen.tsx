@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -32,7 +32,7 @@ import {
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
 import { Consumer, DueStatus, DuesPlan, Payment, PlanType } from '../../../core/types';
-import { formatCurrency, formatDisplayDate, maskAccount } from '../../../core/formatters';
+import { formatCurrency, formatDisplayDate, maskAccount, formatDateOnlyIST } from '../../../core/formatters';
 import {
   adminConsumerFormSchema,
   AdminConsumerFormData,
@@ -55,6 +55,9 @@ export const ConsumerManagementScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [datePreset, setDatePreset] = useState<string>('all'); // 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
 
   // Modals & Drawers
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -262,17 +265,17 @@ export const ConsumerManagementScreen: React.FC = () => {
     duesForm.setValue('remainingEmis', calc.remainingEmis);
   };
 
-  const handleQuickDueDate = (type: '30d' | '5th' | '10th') => {
+  const handleQuickDueDate = (type: '7d' | '14d' | '21d' | '30d') => {
     const now = new Date();
     const target = new Date();
-    if (type === '30d') {
+    if (type === '7d') {
+      target.setDate(now.getDate() + 7);
+    } else if (type === '14d') {
+      target.setDate(now.getDate() + 14);
+    } else if (type === '21d') {
+      target.setDate(now.getDate() + 21);
+    } else if (type === '30d') {
       target.setDate(now.getDate() + 30);
-    } else if (type === '5th') {
-      target.setMonth(now.getMonth() + 1);
-      target.setDate(5);
-    } else if (type === '10th') {
-      target.setMonth(now.getMonth() + 1);
-      target.setDate(10);
     }
     duesForm.setValue('nextEmiDate', target.toISOString().split('T')[0]);
   };
@@ -373,11 +376,40 @@ export const ConsumerManagementScreen: React.FC = () => {
     }
   };
 
+  const todayIST = useMemo(() => formatDateOnlyIST(new Date().toISOString()), []);
+
   const filtered = consumers.filter((c) => {
+    // 1. Strict Gating: ONLY show consumers whose EMI Card application has been approved!
+    if (c.cardApproved !== true) return false;
+
+    // 2. Status Filter
     if (statusFilter !== 'all') {
       if (statusFilter === 'inactive' && c.status !== 'inactive') return false;
       if (statusFilter !== 'inactive' && c.dueStatus.toLowerCase() !== statusFilter.toLowerCase()) return false;
     }
+
+    // 3. Date-wise Filter
+    if (datePreset !== 'all') {
+      const consumerDateIST = formatDateOnlyIST(c.createdAt);
+      if (datePreset === 'today') {
+        if (consumerDateIST !== todayIST) return false;
+      } else if (datePreset === 'yesterday') {
+        const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
+        const yesterdayIST = formatDateOnlyIST(yesterday.toISOString());
+        if (consumerDateIST !== yesterdayIST) return false;
+      } else if (datePreset === 'week') {
+        const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+        if (new Date(c.createdAt) < weekAgo) return false;
+      } else if (datePreset === 'month') {
+        const currentMonthIST = todayIST.slice(0, 7);
+        if (consumerDateIST.slice(0, 7) !== currentMonthIST) return false;
+      } else if (datePreset === 'custom') {
+        if (fromDate && consumerDateIST < fromDate) return false;
+        if (toDate && consumerDateIST > toDate) return false;
+      }
+    }
+
+    // 4. Search Query Filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -403,11 +435,16 @@ export const ConsumerManagementScreen: React.FC = () => {
       {/* Top Header & Add Consumer Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-serif font-bold text-white tracking-wide">
-            Consumer Portfolio Directory
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-serif font-bold text-white tracking-wide">
+              Consumer Portfolio Directory
+            </h1>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              Card Approved Only
+            </span>
+          </div>
           <p className="text-xs text-zinc-400 mt-1">
-            Search, register, manage login credentials, and assign monthly EMI plans to customers.
+            Displaying consumers with approved EMI Cards. Manage credentials, view active EMIs, and track credit limits.
           </p>
         </div>
 
@@ -433,32 +470,119 @@ export const ConsumerManagementScreen: React.FC = () => {
         </button>
       </div>
 
-      {/* Search and Filter Controls */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by consumer name, mobile number, or account number..."
-            className="w-full bg-[#141417] border border-zinc-800 text-white rounded-xl pl-10 pr-4 py-2.5 text-xs outline-none focus:border-akr-gold"
-          />
+      {/* Search, Status & Date Filter Controls */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search Input */}
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by consumer name, mobile number, or account number..."
+              className="w-full bg-[#141417] border border-zinc-800 text-white rounded-xl pl-10 pr-4 py-2.5 text-xs outline-none focus:border-akr-gold"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div className="sm:w-52 relative">
+            <Filter className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full bg-[#141417] border border-zinc-800 text-white rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-akr-gold appearance-none cursor-pointer"
+            >
+              <option value="all">All Statuses ({consumers.filter(c => c.cardApproved === true).length})</option>
+              <option value="clear">Clear</option>
+              <option value="due soon">Due Soon</option>
+              <option value="overdue">Overdue</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          {/* Date Filter Preset */}
+          <div className="sm:w-48 relative">
+            <Calendar className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <select
+              value={datePreset}
+              onChange={(e) => setDatePreset(e.target.value)}
+              className="w-full bg-[#141417] border border-zinc-800 text-white rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-akr-gold appearance-none cursor-pointer"
+            >
+              <option value="all">All Time (Joined)</option>
+              <option value="today">Joined Today</option>
+              <option value="yesterday">Joined Yesterday</option>
+              <option value="week">Past 7 Days</option>
+              <option value="month">This Month</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+          </div>
         </div>
 
-        <div className="sm:w-56 relative">
-          <Filter className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full bg-[#141417] border border-zinc-800 text-white rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-akr-gold appearance-none cursor-pointer"
-          >
-            <option value="all">All Statuses ({consumers.length})</option>
-            <option value="clear">Clear</option>
-            <option value="due soon">Due Soon</option>
-            <option value="overdue">Overdue</option>
-            <option value="inactive">Inactive</option>
-          </select>
+        {/* Custom Date Range Pickers (shown when custom is selected or can be toggled) */}
+        {datePreset === 'custom' && (
+          <div className="p-3 rounded-xl bg-[#141417] border border-akr-border/80 flex flex-wrap items-center gap-3 text-xs">
+            <span className="text-zinc-400 font-medium flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-akr-gold" />
+              <span>Joined Date Range:</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500">From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="bg-[#1c1c22] border border-zinc-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-akr-gold"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500">To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="bg-[#1c1c22] border border-zinc-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-akr-gold"
+              />
+            </div>
+            {(fromDate || toDate) && (
+              <button
+                onClick={() => {
+                  setFromDate('');
+                  setToDate('');
+                  setDatePreset('all');
+                }}
+                className="text-akr-gold hover:underline text-[11px] font-bold ml-auto"
+              >
+                Clear Dates
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Filter Indicator Bar */}
+        <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
+          <span>
+            Showing <strong className="text-white">{filtered.length}</strong> approved consumer accounts
+            {datePreset !== 'all' && (
+              <span className="text-akr-gold ml-1">
+                (Filtered by {datePreset === 'custom' ? `${fromDate || 'start'} to ${toDate || 'today'}` : datePreset})
+              </span>
+            )}
+          </span>
+          {(searchQuery || statusFilter !== 'all' || datePreset !== 'all') && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setStatusFilter('all');
+                setDatePreset('all');
+                setFromDate('');
+                setToDate('');
+              }}
+              className="text-akr-gold hover:underline font-semibold cursor-pointer"
+            >
+              Reset All Filters
+            </button>
+          )}
         </div>
       </div>
 
@@ -963,13 +1087,14 @@ export const ConsumerManagementScreen: React.FC = () => {
             </div>
 
             {/* Smart EMI & Tenure Calculator (6, 9, 11, 12, 24, 36 mo + Custom months & % p.a.) */}
+            {/* Smart EMI & Tenure Calculator (4, 6, 8, 10, 12, 16, 20, 26 wks + Custom weeks, 0% interest) */}
             <EmiTenureCalculator
               key={editingDuesPlan ? editingDuesPlan.id : 'new'}
               principal={duesPrincipal}
               processingFee={duesFee}
               onApplyCalculation={handleApplyEmiCalculation}
-              defaultTenure={editingDuesPlan?.tenureMonths || 12}
-              defaultInterestRate={12}
+              defaultTenure={editingDuesPlan?.tenureWeeks || editingDuesPlan?.tenureMonths || 12}
+              defaultInterestRate={0}
             />
 
             {/* Synced Breakdown & Installment Terms */}
@@ -987,14 +1112,14 @@ export const ConsumerManagementScreen: React.FC = () => {
                 <InputField
                   label="Interest Amount (₹) *"
                   type="number"
-                  placeholder="2000"
+                  placeholder="0"
                   error={duesForm.formState.errors.interest?.message}
                   {...duesForm.register('interest')}
                 />
                 <InputField
-                  label="Monthly EMI Amount (₹) *"
+                  label="Weekly EMI Amount (₹) *"
                   type="number"
-                  placeholder="2500"
+                  placeholder="2000"
                   error={duesForm.formState.errors.emiAmount?.message}
                   {...duesForm.register('emiAmount')}
                 />
@@ -1010,30 +1135,30 @@ export const ConsumerManagementScreen: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-zinc-400 uppercase">
-                    First EMI Due Date *
+                    First Weekly EMI Due Date *
                   </label>
                   <div className="flex items-center gap-1">
                     <span className="text-[10px] text-zinc-500 mr-1">Quick Set:</span>
                     <button
                       type="button"
-                      onClick={() => handleQuickDueDate('30d')}
+                      onClick={() => handleQuickDueDate('7d')}
                       className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded transition-colors"
                     >
-                      +30 Days
+                      +7 Days (1 Wk)
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleQuickDueDate('5th')}
+                      onClick={() => handleQuickDueDate('14d')}
                       className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded transition-colors"
                     >
-                      5th Next Mo
+                      +14 Days (2 Wks)
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleQuickDueDate('10th')}
+                      onClick={() => handleQuickDueDate('21d')}
                       className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded transition-colors"
                     >
-                      10th Next Mo
+                      +21 Days (3 Wks)
                     </button>
                   </div>
                 </div>
@@ -1047,7 +1172,7 @@ export const ConsumerManagementScreen: React.FC = () => {
               {/* Installments & Tenure Count */}
               <div className="grid grid-cols-3 gap-2.5 pt-1">
                 <InputField
-                  label="Total EMIs *"
+                  label="Total Weekly EMIs *"
                   type="number"
                   placeholder="12"
                   error={duesForm.formState.errors.totalEmis?.message}
@@ -1061,7 +1186,7 @@ export const ConsumerManagementScreen: React.FC = () => {
                   {...duesForm.register('remainingEmis')}
                 />
                 <InputField
-                  label="Tenure (Months) *"
+                  label="Tenure (Weeks) *"
                   type="number"
                   placeholder="12"
                   error={duesForm.formState.errors.tenureMonths?.message}
@@ -1357,7 +1482,7 @@ export const ConsumerManagementScreen: React.FC = () => {
                         <div className="text-left sm:text-right">
                           <span className="font-bold text-sm text-akr-gold block">{formatCurrency(p.outstandingAmount)}</span>
                           <div className="text-[10px] text-zinc-400">
-                            EMI: <span className="text-white font-semibold">{formatCurrency(p.emiAmount)}/mo</span>
+                            EMI: <span className="text-white font-semibold">{formatCurrency(p.emiAmount)}/wk</span>
                           </div>
                         </div>
 
