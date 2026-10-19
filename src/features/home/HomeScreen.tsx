@@ -15,6 +15,10 @@ import {
   Landmark,
   Receipt,
   Wallet,
+  Sparkles,
+  Clock,
+  ArrowRight,
+  Check,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { consumerApi } from '../../core/api';
@@ -35,6 +39,21 @@ export const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const consumerSession = useStore((state) => state.consumerSession);
   const notifications = useStore((state) => state.notifications);
+  const cardRequests = useStore((state) => state.cardRequests);
+
+  const consumer = consumerSession?.consumer;
+
+  const userCardRequest = consumer
+    ? cardRequests.find(
+        (r) =>
+          r.consumerId === consumer.id ||
+          r.phone === consumer.mobile ||
+          (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
+      ) || null
+    : null;
+
+  const isCardApproved = consumer?.cardApproved === true || userCardRequest?.status === 'approved';
+  const isCardPending = !isCardApproved && userCardRequest?.status === 'pending';
 
   const [duesData, setDuesData] = useState<{
     totalOutstanding: number;
@@ -48,7 +67,6 @@ export const HomeScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
-  const consumer = consumerSession?.consumer;
   const firstName = consumer?.name.split(' ')[0] || 'Member';
 
   // Count unread notifications
@@ -183,10 +201,121 @@ export const HomeScreen: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="p-6 rounded-2xl bg-akr-surface text-center text-xs text-zinc-400 border border-zinc-800">
-              <ShieldCheck className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
-              <p className="font-bold text-white text-sm">All Payments are Clear!</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">You have no pending dues or overdue EMIs.</p>
+            <div className="space-y-3">
+              {/* Clear status pill */}
+              <div className="p-4 rounded-2xl bg-akr-surface text-center text-xs text-zinc-400 border border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-white text-xs">All Payments are Clear!</p>
+                    <p className="text-[10px] text-zinc-400">No pending weekly dues or overdue EMIs.</p>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-500/25 font-bold uppercase">
+                  Clear
+                </span>
+              </div>
+
+              {/* Apply for EMI Card CTA Banner when user has not yet applied */}
+              {!isCardApproved && !isCardPending && (
+                <div className="rounded-2xl p-5 bg-gradient-to-tr from-[#1A1408] via-[#2A1E0A] to-[#453210] border-2 border-akr-gold/50 shadow-gold-glow relative overflow-hidden text-left space-y-3.5 group">
+                  <div className="absolute top-0 right-0 w-44 h-full pointer-events-none opacity-25 overflow-hidden">
+                    <div className="w-32 h-32 rounded-full bg-akr-gold blur-2xl" />
+                  </div>
+
+                  <div className="relative z-10 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-akr-gold bg-akr-gold/15 px-2 py-0.5 rounded-full border border-akr-gold/30">
+                          Pre-Approved Privilege
+                        </span>
+                        <Sparkles className="w-3.5 h-3.5 text-akr-gold animate-pulse" />
+                      </div>
+                      <h4 className="text-base font-bold text-white tracking-tight">
+                        Apply for AKR EMI Privilege Card
+                      </h4>
+                      <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                        Get up to <strong className="text-akr-gold font-bold">₹50,000 – ₹1,00,000</strong> instant store credit with <strong className="text-emerald-400 font-bold">0% interest</strong> on bridal silk sarees, handlooms, and jewellery.
+                      </p>
+                    </div>
+
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-akr-gold to-amber-600 text-black flex items-center justify-center flex-shrink-0 shadow-md">
+                      <CreditCard className="w-6 h-6 stroke-[2.2]" />
+                    </div>
+                  </div>
+
+                  <div className="relative z-10 flex flex-wrap gap-2 text-[10px] text-zinc-300 font-medium">
+                    <span className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-lg border border-zinc-700/60">
+                      <Check className="w-3 h-3 text-emerald-400" /> 0% APR Weekly EMIs
+                    </span>
+                    <span className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-lg border border-zinc-700/60">
+                      <Check className="w-3 h-3 text-emerald-400" /> Instant Store Approval
+                    </span>
+                    <span className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-lg border border-zinc-700/60">
+                      <Check className="w-3 h-3 text-emerald-400" /> ₹0 Annual Fee
+                    </span>
+                  </div>
+
+                  <div className="relative z-10 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/app/cards')}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-akr-gold via-amber-400 to-akr-gold-dark text-black font-extrabold text-xs tracking-wider uppercase flex items-center justify-center gap-2 hover:brightness-105 active:scale-[0.99] transition-all shadow-gold-glow cursor-pointer"
+                    >
+                      <span>Apply for EMI Card Now</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* If application is already pending review */}
+              {isCardPending && (
+                <div className="rounded-2xl p-4 bg-[#18140E] border border-amber-500/40 text-left space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                        <Clock className="w-3.5 h-3.5" />
+                      </div>
+                      <h4 className="text-xs font-bold text-white">Card Application In Verification</h4>
+                    </div>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/40">
+                      In Review
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300">
+                    Your KYC application is currently being verified by the admin team.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/app/cards')}
+                    className="w-full py-2 rounded-xl bg-zinc-800 text-akr-gold font-bold text-xs flex items-center justify-center gap-1 hover:bg-zinc-700"
+                  >
+                    <span>Check Application Status</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* If card is approved and active */}
+              {isCardApproved && (
+                <div className="rounded-2xl p-4 bg-[#141418] border border-akr-gold/40 text-left flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-zinc-400 uppercase font-bold block">AKR Privilege Card Active</span>
+                    <span className="text-sm font-bold text-akr-gold font-sans">{formatCurrency(consumer?.creditLimit || 50000)} Credit Limit</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/app/cards')}
+                    className="px-3 py-1.5 rounded-xl bg-akr-gold/15 hover:bg-akr-gold/25 border border-akr-gold/40 text-akr-gold font-bold text-xs flex items-center gap-1"
+                  >
+                    <span>View Card</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
