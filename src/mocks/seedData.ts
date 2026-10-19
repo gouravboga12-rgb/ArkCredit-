@@ -13,6 +13,7 @@ import {
   AppNotification,
   ActivityLog,
   AdminUser,
+  CardRequest,
 } from '../core/types';
 
 export const INITIAL_PLAN_TYPES: PlanType[] = [
@@ -259,6 +260,26 @@ export const INITIAL_ACTIVITY_LOGS: ActivityLog[] = [
   },
 ];
 
-// Clean start: No pre-existing card requests so dummy accounts can freshly apply
-export const INITIAL_CARD_REQUESTS: any[] = [];
+// Initial pending card request for Rahul Sharma so admin has an immediate application to review/approve
+export const INITIAL_CARD_REQUESTS: CardRequest[] = [
+  {
+    id: 'req_rahul_4821',
+    referenceNumber: 'CR-2026-4821',
+    consumerId: 'c_rahul_4821',
+    cardTypeId: 'card_emi_privilege',
+    cardTypeName: 'AKR EMI Privilege Card',
+    fullName: 'Rahul Sharma',
+    phone: '9876543210',
+    email: 'rahul@example.com',
+    address: '42, Prestige Palms, Indiranagar, Bengaluru, Karnataka 560038',
+    panNumber: 'ABCDE1234F',
+    aadharNumber: '9876 5432 1098',
+    panDocName: 'Official_PAN_Card_Sample.pdf',
+    panDocData: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80',
+    monthlyIncome: 65000,
+    status: 'pending',
+    createdAt: '2026-10-19T10:30:00.000Z',
+    updatedAt: '2026-10-19T10:30:00.000Z',
+  },
+];
 

@@ -23,6 +23,7 @@ import {
   Check,
   X,
   ChevronDown,
+  RefreshCw,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { CardRequest, CardRequestStatus } from '../../../core/types';
@@ -31,8 +32,10 @@ import { useStore } from '../../../store';
 import { Modal, StatusBadge, GoldButton, Skeleton } from '../../../components/ui';
 
 export const CardRequestsScreen: React.FC = () => {
-  const [requests, setRequests] = useState<CardRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const storeCardRequests = useStore((state) => state.cardRequests || []);
+  const [requests, setRequests] = useState<CardRequest[]>(storeCardRequests);
+  const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [cardTierFilter, setCardTierFilter] = useState<string>('all');
@@ -62,20 +65,52 @@ export const CardRequestsScreen: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const loadRequests = async () => {
+  // Sync with store whenever storeCardRequests updates
+  useEffect(() => {
+    if (storeCardRequests && storeCardRequests.length > 0) {
+      setRequests(storeCardRequests);
+    }
+  }, [storeCardRequests]);
+
+  const loadRequests = async (showSpinner = false) => {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
+      try {
+        await useStore.persist.rehydrate();
+      } catch (e) {}
+
       const data = await adminApi.getCardRequests();
-      setRequests(data);
+      if (Array.isArray(data) && data.length > 0) {
+        setRequests(data);
+      } else {
+        const fallback = useStore.getState().cardRequests || [];
+        setRequests(fallback);
+      }
     } catch (err) {
       console.error('Failed to load card requests', err);
+      const fallback = useStore.getState().cardRequests || [];
+      setRequests(fallback);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    loadRequests();
+    loadRequests(false);
+    const interval = setInterval(() => {
+      loadRequests(false);
+    }, 3000);
+
+    const onFocus = () => {
+      loadRequests(false);
+    };
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
 
   // Today in IST (YYYY-MM-DD)
@@ -209,13 +244,28 @@ export const CardRequestsScreen: React.FC = () => {
           </p>
         </div>
 
-        {/* Live IST Clock Badge */}
-        <div className="p-2.5 rounded-xl bg-[#141418] border border-zinc-800 text-right">
-          <span className="text-[10px] text-zinc-400 uppercase tracking-wider block">Indian Standard Time (IST)</span>
-          <span className="text-xs font-mono font-bold text-akr-gold flex items-center gap-1.5 justify-end">
-            <Clock className="w-3.5 h-3.5 text-akr-gold" />
-            <span>{formatDateTimeIST(new Date().toISOString())}</span>
-          </span>
+        {/* Actions & Live IST Clock Badge */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              setIsRefreshing(true);
+              loadRequests(true);
+            }}
+            className="p-2.5 rounded-xl bg-[#141418] hover:bg-zinc-800 border border-zinc-800 hover:border-akr-gold/40 text-zinc-300 hover:text-akr-gold text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+            title="Refresh Card Requests"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-akr-gold' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
+          <div className="p-2.5 rounded-xl bg-[#141418] border border-zinc-800 text-right">
+            <span className="text-[10px] text-zinc-400 uppercase tracking-wider block">Indian Standard Time (IST)</span>
+            <span className="text-xs font-mono font-bold text-akr-gold flex items-center gap-1.5 justify-end">
+              <Clock className="w-3.5 h-3.5 text-akr-gold" />
+              <span>{formatDateTimeIST(new Date().toISOString())}</span>
+            </span>
+          </div>
         </div>
       </div>
 

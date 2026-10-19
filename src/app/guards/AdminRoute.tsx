@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useStore } from '../../store';
 import { AdminRole } from '../../core/types';
+import { adminAuthService } from '../../services/adminAuthService';
 
 interface AdminRouteProps {
   children: React.ReactNode;
@@ -9,8 +10,13 @@ interface AdminRouteProps {
 }
 
 export const AdminRoute: React.FC<AdminRouteProps> = ({ children, requiredRole }) => {
-  const adminSession = useStore((state) => state.adminSession);
+  const storeAdminSession = useStore((state) => state.adminSession);
   const location = useLocation();
+
+  const adminSession = storeAdminSession || adminAuthService.getSession();
+  if (adminSession && !storeAdminSession) {
+    useStore.setState({ adminSession });
+  }
 
   // If no admin session exists, redirect strictly to admin login (never consumer login)
   if (!adminSession || adminSession.userType !== 'admin') {
@@ -42,7 +48,11 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ children, requiredRole }
 };
 
 export const AdminPublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const adminSession = useStore((state) => state.adminSession);
+  const storeAdminSession = useStore((state) => state.adminSession);
+  const adminSession = storeAdminSession || adminAuthService.getSession();
+  if (adminSession && !storeAdminSession) {
+    useStore.setState({ adminSession });
+  }
 
   // If already logged in as admin, redirect to admin dashboard
   if (adminSession && adminSession.userType === 'admin') {

@@ -1,14 +1,20 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useStore } from '../../store';
+import { consumerAuthService } from '../../services/consumerAuthService';
 
 interface ConsumerRouteProps {
   children: React.ReactNode;
 }
 
 export const ConsumerRoute: React.FC<ConsumerRouteProps> = ({ children }) => {
-  const consumerSession = useStore((state) => state.consumerSession);
+  const storeConsumerSession = useStore((state) => state.consumerSession);
   const location = useLocation();
+
+  const consumerSession = storeConsumerSession || consumerAuthService.getSession();
+  if (consumerSession && !storeConsumerSession) {
+    useStore.setState({ consumerSession });
+  }
 
   // If no consumer session exists, redirect strictly to consumer login
   if (!consumerSession || consumerSession.userType !== 'consumer') {
@@ -24,7 +30,11 @@ export const ConsumerRoute: React.FC<ConsumerRouteProps> = ({ children }) => {
 };
 
 export const ConsumerPublicOnlyRoute: React.FC<ConsumerRouteProps> = ({ children }) => {
-  const consumerSession = useStore((state) => state.consumerSession);
+  const storeConsumerSession = useStore((state) => state.consumerSession);
+  const consumerSession = storeConsumerSession || consumerAuthService.getSession();
+  if (consumerSession && !storeConsumerSession) {
+    useStore.setState({ consumerSession });
+  }
 
   // If already logged in as consumer, redirect to consumer home
   if (consumerSession && consumerSession.userType === 'consumer') {

@@ -895,11 +895,12 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'akr_credit_capital_data_store',
-      version: 4,
+      version: 5,
       migrate: (persistedState: any, version: number) => {
+        let state = persistedState || {};
         if (version < 4) {
-          return {
-            ...persistedState,
+          state = {
+            ...state,
             consumers: INITIAL_CONSUMERS,
             duesPlans: INITIAL_DUES_PLANS,
             payments: INITIAL_PAYMENTS,
@@ -910,9 +911,46 @@ export const useStore = create<StoreState>()(
             consumerSession: { consumer: INITIAL_CONSUMERS[0], token: 'mock-consumer-token-123' },
           };
         }
-        return persistedState;
+        if (version < 5) {
+          // If cardRequests is empty or missing, populate with INITIAL_CARD_REQUESTS
+          const existing = Array.isArray(state.cardRequests) && state.cardRequests.length > 0
+            ? state.cardRequests
+            : INITIAL_CARD_REQUESTS;
+          state = {
+            ...state,
+            cardRequests: existing,
+          };
+        }
+        return state;
       },
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        if (typeof window === 'undefined') return;
+        // Restore isolated consumer session if store's consumerSession was cleared by an admin tab write
+        if (!state?.consumerSession) {
+          try {
+            const raw = localStorage.getItem('akr_consumer_session');
+            if (raw) {
+              const session = JSON.parse(raw);
+              if (session?.userType === 'consumer') {
+                useStore.setState({ consumerSession: session });
+              }
+            }
+          } catch (e) {}
+        }
+        // Restore isolated admin session if store's adminSession was cleared by a consumer tab write
+        if (!state?.adminSession) {
+          try {
+            const raw = localStorage.getItem('akr_admin_session');
+            if (raw) {
+              const session = JSON.parse(raw);
+              if (session?.userType === 'admin') {
+                useStore.setState({ adminSession: session });
+              }
+            }
+          } catch (e) {}
+        }
+      },
       partialize: (state) => ({
         consumers: state.consumers,
         adminUsers: state.adminUsers,
@@ -930,3 +968,35 @@ export const useStore = create<StoreState>()(
     }
   )
 );
+
+// Cross-tab synchronization via storage events
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'akr_credit_capital_data_store') {
+      try {
+        useStore.persist.rehydrate();
+      } catch (e) {
+        console.warn('Storage sync rehydration warning:', e);
+      }
+    }
+    if (event.key === 'akr_consumer_session') {
+      try {
+        const raw = localStorage.getItem('akr_consumer_session');
+        useStore.getState().setConsumerSession(raw ? JSON.parse(raw) : null);
+      } catch (e) {}
+    }
+    if (event.key === 'akr_admin_session') {
+      try {
+        const raw = localStorage.getItem('akr_admin_session');
+        useStore.getState().setAdminSession(raw ? JSON.parse(raw) : null);
+      } catch (e) {}
+    }
+  });
+
+  // When tab becomes active / focused, rehydrate store to ensure freshness across tabs
+  window.addEventListener('focus', () => {
+    try {
+      useStore.persist.rehydrate();
+    } catch (e) {}
+  });
+}

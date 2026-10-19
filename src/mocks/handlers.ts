@@ -977,8 +977,8 @@ export const handlers = [
     const state = useStore.getState();
     const newReq = state.addCardRequest({
       consumerId: consumerId || body.consumerId,
-      cardTypeId: body.cardTypeId || 'card_gold',
-      cardTypeName: body.cardTypeName || 'AKR Gold Card',
+      cardTypeId: body.cardTypeId || 'card_emi_privilege',
+      cardTypeName: body.cardTypeName || 'AKR EMI Privilege Card',
       fullName: body.fullName,
       phone: body.phone,
       email: body.email,
@@ -1000,8 +1000,27 @@ export const handlers = [
       return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const state = useStore.getState();
-    return HttpResponse.json(state.cardRequests);
+    try {
+      await useStore.persist.rehydrate();
+    } catch (e) {}
+
+    let requests = useStore.getState().cardRequests || [];
+
+    // Fallback: If in-memory is empty but localStorage has data, read directly from localStorage
+    if (requests.length === 0 && typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('akr_credit_capital_data_store');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.state?.cardRequests && Array.isArray(parsed.state.cardRequests) && parsed.state.cardRequests.length > 0) {
+            requests = parsed.state.cardRequests;
+            useStore.setState({ cardRequests: requests });
+          }
+        }
+      } catch (e) {}
+    }
+
+    return HttpResponse.json(requests);
   }),
 
   http.put('/api/admin/card-requests/:id/status', async ({ params, request }) => {
@@ -1017,6 +1036,10 @@ export const handlers = [
       remarks?: string;
       creditLimit?: number;
     };
+
+    try {
+      await useStore.persist.rehydrate();
+    } catch (e) {}
 
     const state = useStore.getState();
     const adminName = state.adminSession?.admin.name || 'Admin';
