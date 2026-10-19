@@ -44,11 +44,36 @@ export const CardsScreen: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Store data
+  const consumers = useStore((state) => state.consumers);
   const consumerSession = useStore((state) => state.consumerSession);
   const duesPlans = useStore((state) => state.duesPlans);
   const cardRequests = useStore((state) => state.cardRequests);
 
-  const consumer = consumerSession?.consumer;
+  // Always resolve freshest consumer record from master consumers list
+  const consumer = useMemo(() => {
+    if (!consumerSession?.consumer) return null;
+    const live = consumers.find(
+      (c) => c.id === consumerSession.consumer.id || c.mobile === consumerSession.consumer.mobile
+    );
+    return live || consumerSession.consumer;
+  }, [consumers, consumerSession]);
+
+  // Keep store rehydrated and in sync when switching tabs or periodically
+  useEffect(() => {
+    const handleSync = async () => {
+      try {
+        await useStore.persist.rehydrate();
+      } catch (e) {}
+    };
+
+    window.addEventListener('focus', handleSync);
+    const interval = setInterval(handleSync, 2500);
+
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      clearInterval(interval);
+    };
+  }, []);
 
   const addToast = (message: string) => {
     const id = Date.now().toString();
@@ -125,7 +150,7 @@ export const CardsScreen: React.FC = () => {
   const totalCreditLimit = consumer?.creditLimit || userCardRequest?.creditLimitApproved || 50000;
   const usedAmount = activePlans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0);
   const availableBalance = Math.max(0, totalCreditLimit - usedAmount);
-  const utilizationRate = Math.min(100, Math.round((usedAmount / totalCreditLimit) * 100));
+  const utilizationRate = totalCreditLimit > 0 ? Math.min(100, Math.round((usedAmount / totalCreditLimit) * 100)) : 0;
 
   const handleApplicationSuccess = (req: CardRequest) => {
     setSubmittedRequest(req);

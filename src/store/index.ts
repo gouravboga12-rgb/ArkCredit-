@@ -818,9 +818,21 @@ export const useStore = create<StoreState>()(
             updatedConsumers = [foundConsumer, ...updatedConsumers];
           }
 
+          // CRITICAL: Always synchronize the isolated consumer session in localStorage
+          try {
+            const rawSession = localStorage.getItem('akr_consumer_session');
+            if (rawSession) {
+              const parsed = JSON.parse(rawSession);
+              if (parsed?.consumer && (parsed.consumer.id === foundConsumer.id || parsed.consumer.mobile === target.phone)) {
+                parsed.consumer = foundConsumer;
+                localStorage.setItem('akr_consumer_session', JSON.stringify(parsed));
+                newSession = parsed;
+              }
+            }
+          } catch (e) {}
+
           if (consumerSession && (consumerSession.consumer.id === foundConsumer.id || consumerSession.consumer.mobile === target.phone)) {
             newSession = { ...consumerSession, consumer: foundConsumer };
-            localStorage.setItem('akr_consumer_session', JSON.stringify(newSession));
           }
         }
 
@@ -927,17 +939,20 @@ export const useStore = create<StoreState>()(
       onRehydrateStorage: () => (state) => {
         if (typeof window === 'undefined') return;
         // Restore isolated consumer session if store's consumerSession was cleared by an admin tab write
-        if (!state?.consumerSession) {
+        let cSession = state?.consumerSession;
+        if (!cSession) {
           try {
             const raw = localStorage.getItem('akr_consumer_session');
             if (raw) {
               const session = JSON.parse(raw);
               if (session?.userType === 'consumer') {
+                cSession = session;
                 useStore.setState({ consumerSession: session });
               }
             }
           } catch (e) {}
         }
+
         // Restore isolated admin session if store's adminSession was cleared by a consumer tab write
         if (!state?.adminSession) {
           try {
@@ -949,6 +964,44 @@ export const useStore = create<StoreState>()(
               }
             }
           } catch (e) {}
+        }
+
+        // Reconcile approved card requests with consumers list
+        if (state?.cardRequests && state?.consumers) {
+          let consumersNeedUpdate = false;
+          const updatedConsumers = state.consumers.map((c: Consumer) => {
+            const approvedReq = state.cardRequests.find(
+              (r: CardRequest) =>
+                (r.consumerId === c.id || r.phone === c.mobile) && r.status === 'approved'
+            );
+            if (approvedReq && (!c.cardApproved || c.creditLimit !== approvedReq.creditLimitApproved)) {
+              consumersNeedUpdate = true;
+              const updatedConsumer: Consumer = {
+                ...c,
+                cardApproved: true,
+                cardStatus: 'approved' as const,
+                creditLimit: approvedReq.creditLimitApproved || c.creditLimit || 50000,
+              };
+              return updatedConsumer;
+            }
+            return c;
+          });
+
+          if (consumersNeedUpdate) {
+            useStore.setState({ consumers: updatedConsumers });
+          }
+
+          // Sync consumerSession.consumer with latest consumer
+          if (cSession?.consumer) {
+            const live = updatedConsumers.find(
+              (c: Consumer) => c.id === cSession!.consumer.id || c.mobile === cSession!.consumer.mobile
+            );
+            if (live && (live.cardApproved !== cSession.consumer.cardApproved || live.creditLimit !== cSession.consumer.creditLimit)) {
+              const updatedSession = { ...cSession, consumer: live };
+              useStore.setState({ consumerSession: updatedSession });
+              localStorage.setItem('akr_consumer_session', JSON.stringify(updatedSession));
+            }
+          }
         }
       },
       partialize: (state) => ({

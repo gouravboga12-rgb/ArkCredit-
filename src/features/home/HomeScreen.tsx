@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -37,11 +37,19 @@ import {
 
 export const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
+  const consumers = useStore((state) => state.consumers);
   const consumerSession = useStore((state) => state.consumerSession);
   const notifications = useStore((state) => state.notifications);
   const cardRequests = useStore((state) => state.cardRequests);
 
-  const consumer = consumerSession?.consumer;
+  // Always resolve the freshest consumer record from the master consumers list in store
+  const consumer = useMemo(() => {
+    if (!consumerSession?.consumer) return null;
+    const live = consumers.find(
+      (c) => c.id === consumerSession.consumer.id || c.mobile === consumerSession.consumer.mobile
+    );
+    return live || consumerSession.consumer;
+  }, [consumers, consumerSession]);
 
   const userCardRequest = consumer
     ? cardRequests.find(
@@ -54,6 +62,7 @@ export const HomeScreen: React.FC = () => {
 
   const isCardApproved = consumer?.cardApproved === true || userCardRequest?.status === 'approved';
   const isCardPending = !isCardApproved && userCardRequest?.status === 'pending';
+  const effectiveCreditLimit = consumer?.creditLimit || userCardRequest?.creditLimitApproved || 50000;
 
   const [duesData, setDuesData] = useState<{
     totalOutstanding: number;
@@ -98,6 +107,38 @@ export const HomeScreen: React.FC = () => {
       isMounted = false;
     };
   }, [consumer?.id]);
+
+  // Keep store rehydrated and in sync when switching tabs or periodically
+  useEffect(() => {
+    const handleSync = async () => {
+      try {
+        await useStore.persist.rehydrate();
+      } catch (e) {}
+    };
+
+    window.addEventListener('focus', handleSync);
+    const interval = setInterval(handleSync, 2500);
+
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Update session storage if live consumer has been approved or had credit limit changed
+  useEffect(() => {
+    if (consumer && consumerSession?.consumer) {
+      if (
+        consumerSession.consumer.cardApproved !== consumer.cardApproved ||
+        consumerSession.consumer.creditLimit !== consumer.creditLimit ||
+        consumerSession.consumer.cardStatus !== consumer.cardStatus
+      ) {
+        const updated = { ...consumerSession, consumer };
+        useStore.setState({ consumerSession: updated });
+        localStorage.setItem('akr_consumer_session', JSON.stringify(updated));
+      }
+    }
+  }, [consumer, consumerSession]);
 
   const getPlanIcon = (plan: DuesPlan) => {
     if (plan.planTypeId.includes('card_bill')) return <Receipt className="w-4 h-4 text-akr-gold" />;
@@ -304,7 +345,7 @@ export const HomeScreen: React.FC = () => {
                 <div className="rounded-2xl p-4 bg-[#141418] border border-akr-gold/40 text-left flex items-center justify-between">
                   <div>
                     <span className="text-[10px] text-zinc-400 uppercase font-bold block">AKR Privilege Card Active</span>
-                    <span className="text-sm font-bold text-akr-gold font-sans">{formatCurrency(consumer?.creditLimit || 50000)} Credit Limit</span>
+                    <span className="text-sm font-bold text-akr-gold font-sans">{formatCurrency(effectiveCreditLimit)} Credit Limit</span>
                   </div>
                   <button
                     type="button"
