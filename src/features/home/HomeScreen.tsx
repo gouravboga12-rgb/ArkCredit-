@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { consumerApi } from '../../core/api';
-import { DuesPlan, Payment } from '../../core/types';
+import { DuesPlan, Payment, Consumer } from '../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../core/formatters';
 import { AkrLogo } from '../../assets/logo';
 import {
@@ -51,18 +51,41 @@ export const HomeScreen: React.FC = () => {
     return live || consumerSession.consumer;
   }, [consumers, consumerSession]);
 
-  const userCardRequest = consumer
-    ? cardRequests.find(
-        (r) =>
-          r.consumerId === consumer.id ||
-          r.phone === consumer.mobile ||
-          (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
-      ) || null
-    : null;
+  // Check all requests for current consumer: prioritized by APPROVED > PENDING > any
+  const userCardRequests = useMemo(() => {
+    if (!consumer) return [];
+    return cardRequests.filter(
+      (r) =>
+        r.consumerId === consumer.id ||
+        r.phone === consumer.mobile ||
+        (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
+    );
+  }, [cardRequests, consumer]);
 
-  const isCardApproved = consumer?.cardApproved === true || userCardRequest?.status === 'approved';
-  const isCardPending = !isCardApproved && userCardRequest?.status === 'pending';
-  const effectiveCreditLimit = consumer?.creditLimit || userCardRequest?.creditLimitApproved || 50000;
+  const approvedCardRequest = useMemo(() => {
+    return userCardRequests.find((r) => r.status === 'approved') || null;
+  }, [userCardRequests]);
+
+  const pendingCardRequest = useMemo(() => {
+    return userCardRequests.find((r) => r.status === 'pending') || null;
+  }, [userCardRequests]);
+
+  const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
+
+  const isCardApproved =
+    consumer?.cardApproved === true ||
+    approvedCardRequest !== null ||
+    userCardRequest?.status === 'approved';
+
+  const isCardPending =
+    !isCardApproved &&
+    (pendingCardRequest !== null || userCardRequest?.status === 'pending');
+
+  const approvedLimit = approvedCardRequest?.creditLimitApproved || userCardRequest?.creditLimitApproved;
+  const effectiveCreditLimit =
+    consumer?.creditLimit && consumer.creditLimit > 0
+      ? consumer.creditLimit
+      : (approvedLimit && approvedLimit > 0 ? approvedLimit : 30000);
 
   const [duesData, setDuesData] = useState<{
     totalOutstanding: number;
@@ -139,6 +162,41 @@ export const HomeScreen: React.FC = () => {
       }
     }
   }, [consumer, consumerSession]);
+
+  // If approved card request exists but consumer profile is not yet approved in store, reconcile immediately
+  useEffect(() => {
+    if (approvedCardRequest && consumer) {
+      const targetLimit = approvedCardRequest.creditLimitApproved || 30000;
+      if (!consumer.cardApproved || consumer.creditLimit !== targetLimit) {
+        const cardNum = consumer.cardNumber || `5123 •••• •••• ${consumer.mobile.slice(-4)}`;
+        const updatedConsumer: Consumer = {
+          ...consumer,
+          cardApproved: true,
+          cardStatus: 'approved',
+          creditLimit: targetLimit,
+          cardNumber: cardNum,
+        };
+
+        useStore.setState((state) => ({
+          consumers: state.consumers.map((c) =>
+            c.id === consumer.id || c.mobile === consumer.mobile ? updatedConsumer : c
+          ),
+          consumerSession: state.consumerSession
+            ? { ...state.consumerSession, consumer: updatedConsumer }
+            : null,
+        }));
+
+        try {
+          const raw = localStorage.getItem('akr_consumer_session');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            parsed.consumer = updatedConsumer;
+            localStorage.setItem('akr_consumer_session', JSON.stringify(parsed));
+          }
+        } catch (e) {}
+      }
+    }
+  }, [approvedCardRequest, consumer]);
 
   const getPlanIcon = (plan: DuesPlan) => {
     if (plan.planTypeId.includes('card_bill')) return <Receipt className="w-4 h-4 text-akr-gold" />;

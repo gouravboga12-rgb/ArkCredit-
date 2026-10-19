@@ -836,8 +836,26 @@ export const useStore = create<StoreState>()(
           }
         }
 
+        // When approved, resolve all requests for this phone / consumer to approved so no orphan pending remains
+        const updatedRequests = cardRequests.map((r) => {
+          if (r.id === id) return updated;
+          if (
+            status === 'approved' &&
+            (r.phone === target.phone || (target.consumerId && r.consumerId === target.consumerId))
+          ) {
+            return {
+              ...r,
+              status: 'approved' as const,
+              creditLimitApproved: approvedLimit,
+              adminRemarks: remarks || r.adminRemarks || `Approved with application ${target.referenceNumber}`,
+              updatedAt: now,
+            };
+          }
+          return r;
+        });
+
         set({
-          cardRequests: cardRequests.map((r) => (r.id === id ? updated : r)),
+          cardRequests: updatedRequests,
           consumers: updatedConsumers,
           consumerSession: newSession,
         });
@@ -907,7 +925,7 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'akr_credit_capital_data_store',
-      version: 5,
+      version: 6,
       migrate: (persistedState: any, version: number) => {
         let state = persistedState || {};
         if (version < 4) {
@@ -931,6 +949,73 @@ export const useStore = create<StoreState>()(
           state = {
             ...state,
             cardRequests: existing,
+          };
+        }
+        if (version < 6) {
+          const rawRequests: CardRequest[] = Array.isArray(state.cardRequests) ? state.cardRequests : [];
+          // Collect all approved card requests (e.g. Rahul Sharma CR-2026-4821 approved with ₹30,000)
+          const approvedRequests = rawRequests.filter((r) => r.status === 'approved');
+          const approvedPhones = new Set(approvedRequests.map((r) => r.phone));
+          const approvedConsumerIds = new Set(approvedRequests.map((r) => r.consumerId).filter(Boolean) as string[]);
+          const approvedLimitsByPhone = new Map<string, number>();
+          approvedRequests.forEach((r) => {
+            approvedLimitsByPhone.set(r.phone, r.creditLimitApproved || 30000);
+            if (r.consumerId) approvedLimitsByPhone.set(r.consumerId, r.creditLimitApproved || 30000);
+          });
+
+          // Reconcile card requests: resolve duplicate pending requests for approved consumers
+          const reconciledCardRequests = rawRequests.map((r) => {
+            if (approvedPhones.has(r.phone) || (r.consumerId && approvedConsumerIds.has(r.consumerId))) {
+              return {
+                ...r,
+                status: 'approved' as const,
+                creditLimitApproved: approvedLimitsByPhone.get(r.phone) || approvedLimitsByPhone.get(r.consumerId || '') || 30000,
+              };
+            }
+            return r;
+          });
+
+          // Reconcile consumers
+          const reconciledConsumers = (state.consumers || INITIAL_CONSUMERS).map((c: Consumer) => {
+            if (approvedPhones.has(c.mobile) || approvedConsumerIds.has(c.id)) {
+              const limit = approvedLimitsByPhone.get(c.mobile) || approvedLimitsByPhone.get(c.id) || 30000;
+              return {
+                ...c,
+                cardApproved: true,
+                cardStatus: 'approved' as const,
+                creditLimit: limit,
+              };
+            }
+            return c;
+          });
+
+          // Reconcile consumer session
+          let reconciledConsumerSession = state.consumerSession;
+          if (reconciledConsumerSession?.consumer) {
+            const sessMobile = reconciledConsumerSession.consumer.mobile;
+            const sessId = reconciledConsumerSession.consumer.id;
+            if (approvedPhones.has(sessMobile) || approvedConsumerIds.has(sessId)) {
+              const limit = approvedLimitsByPhone.get(sessMobile) || approvedLimitsByPhone.get(sessId) || 30000;
+              reconciledConsumerSession = {
+                ...reconciledConsumerSession,
+                consumer: {
+                  ...reconciledConsumerSession.consumer,
+                  cardApproved: true,
+                  cardStatus: 'approved',
+                  creditLimit: limit,
+                },
+              };
+              try {
+                localStorage.setItem('akr_consumer_session', JSON.stringify(reconciledConsumerSession));
+              } catch (e) {}
+            }
+          }
+
+          state = {
+            ...state,
+            cardRequests: reconciledCardRequests,
+            consumers: reconciledConsumers,
+            consumerSession: reconciledConsumerSession,
           };
         }
         return state;
@@ -966,11 +1051,33 @@ export const useStore = create<StoreState>()(
           } catch (e) {}
         }
 
-        // Reconcile approved card requests with consumers list
+        // Reconcile approved card requests with consumers list & resolve duplicate pending requests
         if (state?.cardRequests && state?.consumers) {
+          const approvedRequests = state.cardRequests.filter((r: CardRequest) => r.status === 'approved');
+          const approvedPhones = new Set(approvedRequests.map((r: CardRequest) => r.phone));
+          const approvedConsumerIds = new Set(approvedRequests.map((r: CardRequest) => r.consumerId).filter(Boolean) as string[]);
+
+          let requestsNeedUpdate = false;
+          const updatedCardRequests = state.cardRequests.map((r: CardRequest) => {
+            if (r.status !== 'approved' && (approvedPhones.has(r.phone) || (r.consumerId && approvedConsumerIds.has(r.consumerId)))) {
+              requestsNeedUpdate = true;
+              const matchingApproved = approvedRequests.find((a) => a.phone === r.phone || (r.consumerId && a.consumerId === r.consumerId));
+              return {
+                ...r,
+                status: 'approved' as const,
+                creditLimitApproved: matchingApproved?.creditLimitApproved || 30000,
+              };
+            }
+            return r;
+          });
+
+          if (requestsNeedUpdate) {
+            useStore.setState({ cardRequests: updatedCardRequests });
+          }
+
           let consumersNeedUpdate = false;
           const updatedConsumers = state.consumers.map((c: Consumer) => {
-            const approvedReq = state.cardRequests.find(
+            const approvedReq = updatedCardRequests.find(
               (r: CardRequest) =>
                 (r.consumerId === c.id || r.phone === c.mobile) && r.status === 'approved'
             );
@@ -980,7 +1087,7 @@ export const useStore = create<StoreState>()(
                 ...c,
                 cardApproved: true,
                 cardStatus: 'approved' as const,
-                creditLimit: approvedReq.creditLimitApproved || c.creditLimit || 50000,
+                creditLimit: approvedReq.creditLimitApproved || c.creditLimit || 30000,
               };
               return updatedConsumer;
             }

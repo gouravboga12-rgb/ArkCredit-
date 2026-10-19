@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Copy,
@@ -37,21 +37,49 @@ import {
 
 export const ConsumerDetailsScreen: React.FC = () => {
   const navigate = useNavigate();
+  const consumers = useStore((state) => state.consumers);
   const consumerSession = useStore((state) => state.consumerSession);
   const cardRequests = useStore((state) => state.cardRequests);
-  const consumer = consumerSession?.consumer;
 
-  const userCardRequest = consumer
-    ? cardRequests.find(
-        (r) =>
-          r.consumerId === consumer.id ||
-          r.phone === consumer.mobile ||
-          (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
-      ) || null
-    : null;
+  // Always resolve freshest consumer record from master consumers list
+  const consumer = useMemo(() => {
+    if (!consumerSession?.consumer) return null;
+    const live = consumers.find(
+      (c) => c.id === consumerSession.consumer.id || c.mobile === consumerSession.consumer.mobile
+    );
+    return live || consumerSession.consumer;
+  }, [consumers, consumerSession]);
 
-  const isApproved = consumer?.cardApproved === true || userCardRequest?.status === 'approved';
-  const isPending = !isApproved && userCardRequest?.status === 'pending';
+  // Check card requests for current user: prioritize APPROVED > PENDING > any
+  const userCardRequests = useMemo(() => {
+    if (!consumer) return [];
+    return cardRequests.filter(
+      (r) =>
+        r.consumerId === consumer.id ||
+        r.phone === consumer.mobile ||
+        (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
+    );
+  }, [cardRequests, consumer]);
+
+  const approvedCardRequest = useMemo(() => {
+    return userCardRequests.find((r) => r.status === 'approved') || null;
+  }, [userCardRequests]);
+
+  const pendingCardRequest = useMemo(() => {
+    return userCardRequests.find((r) => r.status === 'pending') || null;
+  }, [userCardRequests]);
+
+  const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
+
+  const isApproved =
+    consumer?.cardApproved === true ||
+    approvedCardRequest !== null ||
+    userCardRequest?.status === 'approved';
+
+  const isPending =
+    !isApproved &&
+    (pendingCardRequest !== null || userCardRequest?.status === 'pending');
+
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<DuesPlan[]>([]);
@@ -60,7 +88,12 @@ export const ConsumerDetailsScreen: React.FC = () => {
   const [selectedPlanId, setSelectedPlanId] = useState<string>('all');
   const [activeCardIndex, setActiveCardIndex] = useState(0);
 
-  const totalCreditLimit = consumer?.creditLimit || userCardRequest?.creditLimitApproved || 50000;
+  const approvedLimit = approvedCardRequest?.creditLimitApproved || userCardRequest?.creditLimitApproved;
+  const totalCreditLimit =
+    consumer?.creditLimit && consumer.creditLimit > 0
+      ? consumer.creditLimit
+      : (approvedLimit && approvedLimit > 0 ? approvedLimit : 30000);
+
   const usedAmount = plans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0);
   const availableBalance = Math.max(0, totalCreditLimit - usedAmount);
 

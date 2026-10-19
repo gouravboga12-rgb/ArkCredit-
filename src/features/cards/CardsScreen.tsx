@@ -123,22 +123,36 @@ export const CardsScreen: React.FC = () => {
     enabled: true,
   };
 
-  // Check card request status for current user
-  const userCardRequest = useMemo(() => {
-    if (!consumer) return null;
-    return (
-      cardRequests.find(
-        (r) =>
-          r.consumerId === consumer.id ||
-          r.phone === consumer.mobile ||
-          (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
-      ) || null
+  // Check card requests for current user: prioritize APPROVED > PENDING > any
+  const userCardRequests = useMemo(() => {
+    if (!consumer) return [];
+    return cardRequests.filter(
+      (r) =>
+        r.consumerId === consumer.id ||
+        r.phone === consumer.mobile ||
+        (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
     );
   }, [cardRequests, consumer]);
 
+  const approvedCardRequest = useMemo(() => {
+    return userCardRequests.find((r) => r.status === 'approved') || null;
+  }, [userCardRequests]);
+
+  const pendingCardRequest = useMemo(() => {
+    return userCardRequests.find((r) => r.status === 'pending') || null;
+  }, [userCardRequests]);
+
+  const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
+
   // Card Approval State
-  const isApproved = consumer?.cardApproved === true || userCardRequest?.status === 'approved';
-  const isPending = !isApproved && userCardRequest?.status === 'pending';
+  const isApproved =
+    consumer?.cardApproved === true ||
+    approvedCardRequest !== null ||
+    userCardRequest?.status === 'approved';
+
+  const isPending =
+    !isApproved &&
+    (pendingCardRequest !== null || userCardRequest?.status === 'pending');
 
   // Active dues plans linked to consumer
   const activePlans = useMemo(() => {
@@ -147,7 +161,12 @@ export const CardsScreen: React.FC = () => {
   }, [duesPlans, consumer]);
 
   // Financial Calculations
-  const totalCreditLimit = consumer?.creditLimit || userCardRequest?.creditLimitApproved || 50000;
+  const approvedLimit = approvedCardRequest?.creditLimitApproved || userCardRequest?.creditLimitApproved;
+  const totalCreditLimit =
+    consumer?.creditLimit && consumer.creditLimit > 0
+      ? consumer.creditLimit
+      : (approvedLimit && approvedLimit > 0 ? approvedLimit : 30000);
+
   const usedAmount = activePlans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0);
   const availableBalance = Math.max(0, totalCreditLimit - usedAmount);
   const utilizationRate = totalCreditLimit > 0 ? Math.min(100, Math.round((usedAmount / totalCreditLimit) * 100)) : 0;
