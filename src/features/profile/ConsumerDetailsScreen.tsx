@@ -15,6 +15,8 @@ import {
   ExternalLink,
   Monitor,
   ArrowRight,
+  Sparkles,
+  Clock,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { consumerApi } from '../../core/api';
@@ -36,8 +38,20 @@ import {
 export const ConsumerDetailsScreen: React.FC = () => {
   const navigate = useNavigate();
   const consumerSession = useStore((state) => state.consumerSession);
+  const cardRequests = useStore((state) => state.cardRequests);
   const consumer = consumerSession?.consumer;
 
+  const userCardRequest = consumer
+    ? cardRequests.find(
+        (r) =>
+          r.consumerId === consumer.id ||
+          r.phone === consumer.mobile ||
+          (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
+      ) || null
+    : null;
+
+  const isApproved = consumer?.cardApproved === true || userCardRequest?.status === 'approved';
+  const isPending = !isApproved && userCardRequest?.status === 'pending';
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<DuesPlan[]>([]);
@@ -45,6 +59,18 @@ export const ConsumerDetailsScreen: React.FC = () => {
   const [cards, setCards] = useState<CardType[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('all');
   const [activeCardIndex, setActiveCardIndex] = useState(0);
+
+  const totalCreditLimit = consumer?.creditLimit || userCardRequest?.creditLimitApproved || 50000;
+  const usedAmount = plans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0);
+  const availableBalance = Math.max(0, totalCreditLimit - usedAmount);
+
+  const maskedCardNumber =
+    consumer?.cardNumber ||
+    (consumer?.mobile
+      ? `5123 •••• •••• ${consumer.mobile.slice(-4)}`
+      : '5123 •••• •••• 8842');
+
+  const cardholderName = (consumer?.name || 'Valued Member').toUpperCase();
 
   // Modals
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
@@ -145,8 +171,8 @@ export const ConsumerDetailsScreen: React.FC = () => {
     : selectedPlan?.remainingEmis || 0;
 
   const displayTenure = isAll
-    ? `${Math.max(...plans.map((p) => p.tenureMonths || 0), 12)} Months`
-    : `${selectedPlan?.tenureMonths || 0} Months`;
+    ? `${Math.max(...plans.map((p) => p.tenureWeeks || p.tenureMonths || 0), plans.length > 0 ? 12 : 0)} Weeks`
+    : `${selectedPlan?.tenureWeeks || selectedPlan?.tenureMonths || 0} Weeks`;
 
   const totalOutstanding = plans.reduce((sum, p) => sum + p.outstandingAmount, 0);
 
@@ -197,216 +223,295 @@ export const ConsumerDetailsScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* EMI Schedule with Plan Selector (Phone 5 in template) */}
-          <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 text-left">
-            <div className="flex items-center justify-between mb-3">
+          {/* EMI Schedule & Dues Summary */}
+          {plans.length > 0 ? (
+            <>
+              {/* EMI Schedule with Plan Selector */}
+              <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 text-left">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs uppercase font-bold text-white tracking-wider">
+                    Weekly EMI Schedule
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsFullScheduleOpen(true)}
+                    className="text-xs font-semibold text-akr-gold hover:underline"
+                  >
+                    View All
+                  </button>
+                </div>
+
+                {/* Plan Selector Filter */}
+                <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPlanId('all')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                      selectedPlanId === 'all'
+                        ? 'bg-akr-gold text-black'
+                        : 'bg-akr-bg text-zinc-400 border border-akr-border'
+                    }`}
+                  >
+                    Combined Summary
+                  </button>
+                  {plans.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelectedPlanId(p.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all ${
+                        selectedPlanId === p.id
+                          ? 'bg-akr-gold text-black'
+                          : 'bg-akr-bg text-zinc-400 border border-akr-border'
+                      }`}
+                    >
+                      {p.title}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Next EMI pill row */}
+                <div className="p-3 rounded-xl bg-akr-bg border border-akr-border/60 mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-akr-gold/15 text-akr-gold flex items-center justify-center">
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-zinc-400 uppercase">Next Weekly EMI</div>
+                      <div className="text-sm font-bold text-white font-sans">
+                        {displayEmiAmount > 0 ? formatCurrency(displayEmiAmount) : 'No EMI'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <StatusBadge status="Due Soon" size="sm" />
+                    <div className="text-[10px] text-zinc-400 mt-1">
+                      {displayNextDate ? formatDisplayDate(displayNextDate) : 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3 Metric Grid */}
+                <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-akr-border/60">
+                  <div>
+                    <span className="text-[9px] uppercase text-zinc-400 block">Remaining</span>
+                    <span className="text-xs font-bold text-white mt-0.5 block">
+                      {displayRemaining} Weeks
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase text-zinc-400 block">Weekly EMI</span>
+                    <span className="text-xs font-bold text-akr-gold mt-0.5 block">
+                      {formatCurrency(displayEmiAmount)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase text-zinc-400 block">Tenure</span>
+                    <span className="text-xs font-bold text-white mt-0.5 block">
+                      {displayTenure}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dues Summary */}
+              <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 text-left">
+                <h3 className="text-xs uppercase font-bold text-white tracking-wider mb-3">
+                  Dues Summary
+                </h3>
+
+                <div className="flex items-center justify-between pb-3 border-b border-akr-border/60">
+                  <div>
+                    <span className="text-[10px] uppercase text-zinc-400 block">Total Outstanding</span>
+                    <span className="text-xl font-bold text-white font-sans">
+                      {formatCurrency(totalOutstanding)}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase text-zinc-400 block">Next Due</span>
+                    <span className="text-xs font-semibold text-white">
+                      {displayNextDate ? formatDisplayDate(displayNextDate) : 'N/A'}
+                    </span>
+                    <div className="mt-1 flex justify-end">
+                      <StatusBadge status="Due Soon" size="sm" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-plan list */}
+                <div className="pt-3 space-y-2">
+                  {plans.map((p) => (
+                    <div key={p.id} className="flex justify-between items-center text-xs">
+                      <div className="min-w-0 pr-2">
+                        <p className="font-semibold text-zinc-200 truncate">{p.title}</p>
+                        <p className="text-[10px] text-zinc-500 font-mono">Ref: {p.referenceNumber}</p>
+                      </div>
+                      <span className="font-bold text-akr-gold flex-shrink-0">
+                        {formatCurrency(p.outstandingAmount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Clean 0 Dues State */
+            <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 text-left space-y-2">
               <h3 className="text-xs uppercase font-bold text-white tracking-wider">
-                EMI Schedule
+                Dues Summary
               </h3>
-              <button
-                type="button"
-                onClick={() => setIsFullScheduleOpen(true)}
-                className="text-xs font-semibold text-akr-gold hover:underline"
-              >
-                View All
-              </button>
-            </div>
-
-            {/* Plan Selector Filter */}
-            <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setSelectedPlanId('all')}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
-                  selectedPlanId === 'all'
-                    ? 'bg-akr-gold text-black'
-                    : 'bg-akr-bg text-zinc-400 border border-akr-border'
-                }`}
-              >
-                Combined Summary
-              </button>
-              {plans.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setSelectedPlanId(p.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all ${
-                    selectedPlanId === p.id
-                      ? 'bg-akr-gold text-black'
-                      : 'bg-akr-bg text-zinc-400 border border-akr-border'
-                  }`}
-                >
-                  {p.title}
-                </button>
-              ))}
-            </div>
-
-            {/* Next EMI pill row */}
-            <div className="p-3 rounded-xl bg-akr-bg border border-akr-border/60 mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-akr-gold/15 text-akr-gold flex items-center justify-center">
-                  <Calendar className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-[10px] text-zinc-400 uppercase">Next EMI</div>
-                  <div className="text-sm font-bold text-white font-sans">
-                    {displayEmiAmount > 0 ? formatCurrency(displayEmiAmount) : 'No EMI'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <StatusBadge status="Due Soon" size="sm" />
-                <div className="text-[10px] text-zinc-400 mt-1">
-                  {displayNextDate ? formatDisplayDate(displayNextDate) : 'N/A'}
-                </div>
+              <div className="p-4 rounded-xl bg-akr-bg border border-zinc-800 text-center">
+                <ShieldCheck className="w-8 h-8 text-emerald-400 mx-auto mb-1.5 opacity-90" />
+                <p className="font-bold text-white text-xs">No Active Loan or EMI Dues</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  Your account is completely clear. Apply for your EMI Privilege Card to finance silk sarees and store purchases!
+                </p>
               </div>
             </div>
+          )}
 
-            {/* 3 Metric Grid: Total/Remaining EMIs, EMI Amount, Loan Tenure */}
-            <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-akr-border/60">
-              <div>
-                <span className="text-[9px] uppercase text-zinc-400 block">Remaining</span>
-                <span className="text-xs font-bold text-white mt-0.5 block">
-                  {displayRemaining} EMIs
-                </span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase text-zinc-400 block">EMI Amount</span>
-                <span className="text-xs font-bold text-akr-gold mt-0.5 block">
-                  {formatCurrency(displayEmiAmount)}
-                </span>
-              </div>
-              <div>
-                <span className="text-[9px] uppercase text-zinc-400 block">Tenure</span>
-                <span className="text-xs font-bold text-white mt-0.5 block">
-                  {displayTenure}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Dues Summary (Phone 5 in template) */}
-          <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 text-left">
-            <h3 className="text-xs uppercase font-bold text-white tracking-wider mb-3">
-              Dues Summary
-            </h3>
-
-            <div className="flex items-center justify-between pb-3 border-b border-akr-border/60">
-              <div>
-                <span className="text-[10px] uppercase text-zinc-400 block">Total Outstanding</span>
-                <span className="text-xl font-bold text-white font-sans">
-                  {formatCurrency(totalOutstanding)}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] uppercase text-zinc-400 block">Next Due</span>
-                <span className="text-xs font-semibold text-white">
-                  {displayNextDate ? formatDisplayDate(displayNextDate) : 'N/A'}
-                </span>
-                <div className="mt-1 flex justify-end">
-                  <StatusBadge status="Due Soon" size="sm" />
-                </div>
-              </div>
-            </div>
-
-            {/* Per-plan list */}
-            <div className="pt-3 space-y-2">
-              {plans.map((p) => (
-                <div key={p.id} className="flex justify-between items-center text-xs">
-                  <div className="min-w-0 pr-2">
-                    <p className="font-semibold text-zinc-200 truncate">{p.title}</p>
-                    <p className="text-[10px] text-zinc-500 font-mono">Ref: {p.referenceNumber}</p>
-                  </div>
-                  <span className="font-bold text-akr-gold flex-shrink-0">
-                    {formatCurrency(p.outstandingAmount)}
+          {/* AKR EMI Privilege Card (Matches CardsScreen) */}
+          <div className="text-left space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs uppercase font-bold text-white tracking-wider flex items-center gap-1.5">
+                <span>EMI Privilege Card</span>
+                {isApproved && (
+                  <span className="text-[10px] bg-emerald-500/15 text-emerald-300 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    Active
                   </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Your Cards Carousel (Phone 5 in template) */}
-          <div className="text-left">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs uppercase font-bold text-white tracking-wider">
-                Your Cards ({cards.length})
+                )}
               </h3>
               <button
                 type="button"
                 onClick={() => navigate('/app/cards')}
-                className="text-xs font-semibold text-akr-gold hover:underline"
+                className="text-xs font-semibold text-akr-gold hover:underline flex items-center gap-1"
               >
-                View All
+                <span>{isApproved ? 'Manage Card' : 'Card Details'}</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {loading ? (
-              <Skeleton className="h-44 w-full rounded-card" />
-            ) : cards.length > 0 ? (
-              <div>
-                {/* Horizontal Snap Scroll Carousel */}
-                <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar snap-x snap-mandatory">
-                  {cards.map((card, i) => (
-                    <div
-                      key={card.id}
-                      className="w-[85%] flex-shrink-0 snap-center"
-                      onClick={() => setActiveCardIndex(i)}
-                    >
-                      <div
-                        className={`
-                          p-4 rounded-xl border relative overflow-hidden aspect-[1.7/1] flex flex-col justify-between
-                          ${
-                            card.name.toLowerCase().includes('gold')
-                              ? 'bg-gradient-to-tr from-[#1E1708] to-[#4A3912] border-akr-gold/50'
-                              : 'bg-gradient-to-tr from-[#15171C] to-[#2B303C] border-zinc-500/40'
-                          }
-                        `}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-serif font-bold text-xs tracking-wider text-akr-gold">
-                            AKR CREDIT CAPITAL
-                          </span>
-                          <span className="font-mono text-[9px] text-zinc-300">VALID 10/30</span>
-                        </div>
+            {/* Visual Single EMI Card */}
+            <div
+              onClick={() => navigate('/app/cards')}
+              className="relative w-full aspect-[1.586/1] max-w-md mx-auto rounded-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-2xl bg-gradient-to-tr from-[#161208] via-[#33260C] to-[#614B1A] border border-[#D4AF37]/60 cursor-pointer group hover:border-akr-gold transition-all"
+            >
+              {/* Metallic Sheen Overlay */}
+              <div className="absolute inset-0 bg-gold-card-sheen opacity-70 pointer-events-none" />
 
-                        <div>
-                          <h4 className="font-serif text-sm font-bold text-white drop-shadow">
-                            {card.name}
-                          </h4>
-                          <p className="font-mono text-xs text-zinc-300 tracking-widest mt-0.5">
-                            •••• •••• •••• 8842
-                          </p>
-                        </div>
-
-                        <div className="flex justify-between items-end">
-                          <span className="text-[9px] text-zinc-300 uppercase">
-                            {consumer?.name || 'Rahul Sharma'}
-                          </span>
-                          <span className="font-sans font-black italic text-sm text-white">
-                            VISA
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              {/* Card Top: Branding & Chip */}
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="font-serif font-bold text-sm sm:text-base tracking-wider text-[#F3D98B]">
+                    AKR
+                  </span>
+                  <span className="text-[7px] sm:text-[8px] uppercase tracking-widest text-zinc-300">
+                    Credit Capital
+                  </span>
                 </div>
 
-                {/* Carousel Indicator Dots */}
-                <div className="flex justify-center gap-1.5 mt-2">
-                  {cards.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setActiveCardIndex(i)}
-                      className={`w-2 h-2 rounded-full transition-all ${
-                        activeCardIndex === i ? 'w-4 bg-akr-gold' : 'bg-zinc-700'
-                      }`}
-                      aria-label={`Card ${i + 1}`}
-                    />
-                  ))}
+                <div className="flex items-center gap-2">
+                  {/* Status Pill on Card */}
+                  {isApproved ? (
+                    <span className="flex items-center gap-1 text-[8px] sm:text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      ACTIVE
+                    </span>
+                  ) : isPending ? (
+                    <span className="flex items-center gap-1 text-[8px] sm:text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      <Clock className="w-2.5 h-2.5" />
+                      IN REVIEW
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[8px] sm:text-[9px] font-bold px-2 py-0.5 rounded-full bg-akr-gold/20 text-akr-gold-light border border-akr-gold/40">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      PRE-APPROVED
+                    </span>
+                  )}
+
+                  {/* Golden EMV Chip */}
+                  <div className="w-8 h-6 sm:w-9 sm:h-7 rounded bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border border-amber-600/60 flex items-center justify-center opacity-95 shadow-inner">
+                    <div className="w-6 h-4 sm:w-7 sm:h-5 border border-amber-700/50 rounded-sm" />
+                  </div>
                 </div>
               </div>
-            ) : null}
+
+              {/* Card Middle: Title & Masked Number */}
+              <div className="relative z-10 my-auto">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-widest text-[#F3D98B]">
+                    EMI PRIVILEGE CARD
+                  </span>
+                </div>
+                <p className="text-sm sm:text-lg text-white font-mono tracking-widest drop-shadow">
+                  {isApproved ? maskedCardNumber : '•••• •••• •••• ••••'}
+                </p>
+              </div>
+
+              {/* Card Bottom: Holder Name, Valid Thru & Network */}
+              <div className="relative z-10 flex items-end justify-between">
+                <div>
+                  <span className="text-[7px] sm:text-[8px] uppercase tracking-wider text-zinc-400 block font-mono">
+                    CARDHOLDER
+                  </span>
+                  <span className="text-[11px] sm:text-xs font-bold font-mono tracking-wide text-white drop-shadow">
+                    {cardholderName}
+                  </span>
+                </div>
+
+                <div className="text-[8px] sm:text-[9px] uppercase tracking-wider text-zinc-300 font-mono text-center">
+                  <div>VALID THRU</div>
+                  <div className="font-semibold text-white">10/31</div>
+                </div>
+
+                <div className="flex items-center">
+                  <span className="font-sans font-black italic text-base sm:text-lg tracking-tighter text-white drop-shadow">
+                    VISA
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Limit or Apply CTA underneath */}
+            {isApproved ? (
+              <div className="p-3 rounded-xl bg-akr-surface border border-akr-border/80 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[10px] text-zinc-400 uppercase block">Credit Limit</span>
+                  <span className="font-bold text-akr-gold">{formatCurrency(totalCreditLimit)}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-zinc-400 uppercase block">Available Balance</span>
+                  <span className="font-bold text-emerald-400">{formatCurrency(availableBalance)}</span>
+                </div>
+              </div>
+            ) : isPending ? (
+              <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between text-xs">
+                <span className="text-amber-300">Application submitted • In review by admin</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/app/cards')}
+                  className="text-akr-gold font-bold hover:underline"
+                >
+                  View Status
+                </button>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-xl bg-akr-surface border border-akr-gold/40 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-akr-gold uppercase font-bold block">Pre-Approved Limit</span>
+                  <span className="text-xs font-bold text-white">Up to ₹50,000 – ₹1,00,000</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/app/cards')}
+                  className="px-3 py-1.5 rounded-lg bg-akr-gold text-black font-bold text-xs hover:bg-akr-gold-light transition-all shadow-md flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Apply Now</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Profile & Notifications Navigation Links (Phone 5 in template) */}

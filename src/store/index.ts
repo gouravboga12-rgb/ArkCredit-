@@ -895,15 +895,19 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'akr_credit_capital_data_store',
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
-        if (version < 2 || (persistedState?.consumers && persistedState.consumers.length > 5)) {
+        if (version < 3 || (persistedState?.duesPlans && persistedState.duesPlans.length > 0)) {
           return {
             ...persistedState,
             consumers: INITIAL_CONSUMERS,
             duesPlans: INITIAL_DUES_PLANS,
             payments: INITIAL_PAYMENTS,
+            cardTypes: INITIAL_CARD_TYPES,
+            cardRequests: INITIAL_CARD_REQUESTS,
+            notifications: INITIAL_NOTIFICATIONS,
             activityLogs: INITIAL_ACTIVITY_LOGS,
+            consumerSession: { consumer: INITIAL_CONSUMERS[0], token: 'mock-consumer-token-123' },
           };
         }
         return persistedState;
@@ -916,6 +920,7 @@ export const useStore = create<StoreState>()(
         duesPlans: state.duesPlans,
         payments: state.payments,
         cardTypes: state.cardTypes,
+        cardRequests: state.cardRequests,
         notifications: state.notifications,
         activityLogs: state.activityLogs,
         consumerSession: state.consumerSession,
