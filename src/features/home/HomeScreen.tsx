@@ -406,18 +406,36 @@ export const HomeScreen: React.FC = () => {
 
               {/* If card is approved and active */}
               {isCardApproved && (
-                <div className="rounded-2xl p-4 bg-[#141418] border border-akr-gold/40 text-left flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-zinc-400 uppercase font-bold block">AKR Privilege Card Active</span>
-                    <span className="text-sm font-bold text-akr-gold font-sans">{formatCurrency(effectiveCreditLimit)} Credit Limit</span>
+                <div
+                  onClick={() => navigate('/app/cards')}
+                  className="rounded-2xl p-4 bg-gradient-to-r from-[#18140B] via-[#241B0E] to-[#18140B] border border-akr-gold/50 shadow-gold-glow text-left flex items-center justify-between cursor-pointer group hover:border-akr-gold transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-akr-gold to-amber-600 text-black flex items-center justify-center font-serif font-black text-xs shadow-md">
+                      AKR
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-[10px] text-zinc-300 uppercase font-bold tracking-wider">
+                          EMI Privilege Card Active
+                        </span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      </div>
+                      <span className="text-sm font-bold text-akr-gold font-sans">
+                        {formatCurrency(effectiveCreditLimit)} Credit Limit
+                      </span>
+                    </div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => navigate('/app/cards')}
-                    className="px-3 py-1.5 rounded-xl bg-akr-gold/15 hover:bg-akr-gold/25 border border-akr-gold/40 text-akr-gold font-bold text-xs flex items-center gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate('/app/cards');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-akr-gold/20 hover:bg-akr-gold/30 border border-akr-gold/40 text-akr-gold font-bold text-xs flex items-center gap-1 cursor-pointer"
                   >
                     <span>View Card</span>
-                    <ChevronRight className="w-3 h-3" />
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}

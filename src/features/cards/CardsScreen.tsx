@@ -247,139 +247,159 @@ export const CardsScreen: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {/* Visual Single EMI Card */}
-              <div className="relative w-full aspect-[1.586/1] max-w-md mx-auto rounded-2xl p-5 flex flex-col justify-between overflow-hidden shadow-2xl bg-gradient-to-tr from-[#161208] via-[#33260C] to-[#614B1A] border border-[#D4AF37]/60 group">
+              {/* Visual Single All-in-One EMI Privilege Card */}
+              <div className="relative w-full min-h-[240px] sm:min-h-[260px] aspect-[1.48/1] max-w-md mx-auto rounded-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-2xl bg-gradient-to-tr from-[#141008] via-[#2A1F0B] to-[#4A3714] border border-[#D4AF37]/60 group">
                 {/* Decorative Metallic Sheen Overlay */}
                 <div className="absolute inset-0 bg-gold-card-sheen opacity-70 pointer-events-none" />
 
-                {/* Card Top: Branding & Chip */}
+                {/* Card Top: Branding & Chip & Status Pill */}
                 <div className="relative z-10 flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="font-serif font-bold text-base tracking-wider text-[#F3D98B]">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-akr-gold via-amber-400 to-akr-gold-dark text-black flex items-center justify-center font-serif font-black text-sm shadow-md">
                       AKR
-                    </span>
-                    <span className="text-[8px] uppercase tracking-widest text-zinc-300">
-                      Credit Capital
-                    </span>
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="font-serif font-bold text-sm sm:text-base tracking-wider text-[#F3D98B] leading-tight">
+                        AKR CREDIT CAPITAL
+                      </span>
+                      <span className="text-[7.5px] sm:text-[8px] uppercase tracking-widest text-zinc-300">
+                        Store EMI Privilege Card
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2">
                     {/* Status Pill on Card */}
                     {isApproved ? (
-                      <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      <span className="flex items-center gap-1.5 text-[8.5px] sm:text-[9.5px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm backdrop-blur-md">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         ACTIVE
                       </span>
                     ) : isPending ? (
-                      <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      <span className="flex items-center gap-1.5 text-[8.5px] sm:text-[9.5px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 backdrop-blur-md">
                         <Clock className="w-2.5 h-2.5" />
                         IN REVIEW
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-akr-gold/20 text-akr-gold-light border border-akr-gold/40">
+                      <span className="flex items-center gap-1.5 text-[8.5px] sm:text-[9.5px] font-bold px-2.5 py-0.5 rounded-full bg-akr-gold/20 text-akr-gold-light border border-akr-gold/40 backdrop-blur-md">
                         <Sparkles className="w-2.5 h-2.5" />
                         PRE-APPROVED
                       </span>
                     )}
 
                     {/* Golden EMV Chip */}
-                    <div className="w-9 h-7 rounded bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border border-amber-600/60 flex items-center justify-center opacity-95 shadow-inner">
-                      <div className="w-7 h-5 border border-amber-700/50 rounded-sm" />
+                    <div className="w-8 h-6 sm:w-9 sm:h-7 rounded bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border border-amber-600/70 flex items-center justify-center opacity-95 shadow-inner">
+                      <div className="w-6 h-4 sm:w-7 sm:h-5 border border-amber-700/60 rounded-xs" />
                     </div>
                   </div>
                 </div>
 
-                {/* Card Middle: Card Title & Masked Number */}
-                <div className="relative z-10 my-auto">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#F3D98B]">
-                      EMI PRIVILEGE CARD
-                    </span>
-                  </div>
-                  <p className="text-base sm:text-lg text-white font-mono tracking-widest drop-shadow">
-                    {isApproved ? maskedCardNumber : '•••• •••• •••• ••••'}
-                  </p>
-                </div>
-
-                {/* Card Bottom: Holder Name, Valid Thru & Network */}
-                <div className="relative z-10 flex items-end justify-between">
+                {/* Card Middle: Card Number & Cardholder */}
+                <div className="relative z-10 flex items-center justify-between my-auto py-1">
                   <div>
-                    <span className="text-[8px] uppercase tracking-wider text-zinc-400 block font-mono">
+                    <div className="text-[8px] sm:text-[9px] uppercase tracking-widest text-amber-200/80 font-mono mb-0.5">
+                      EMI CARD NUMBER
+                    </div>
+                    <p className="text-base sm:text-xl text-white font-mono font-bold tracking-widest drop-shadow">
+                      {isApproved ? maskedCardNumber : '•••• •••• •••• ••••'}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[7.5px] sm:text-[8px] uppercase tracking-wider text-zinc-400 block font-mono">
                       CARDHOLDER
                     </span>
-                    <span className="text-xs font-bold font-mono tracking-wide text-white drop-shadow">
+                    <span className="text-xs sm:text-sm font-bold font-mono tracking-wide text-white drop-shadow block">
                       {cardholderName}
                     </span>
-                  </div>
-
-                  <div className="text-[9px] uppercase tracking-wider text-zinc-300 font-mono text-center">
-                    <div>VALID THRU</div>
-                    <div className="font-semibold text-white">10/31</div>
-                  </div>
-
-                  <div className="flex items-center">
-                    <span className="font-sans font-black italic text-lg tracking-tighter text-white drop-shadow">
-                      VISA
+                    <span className="text-[8px] text-zinc-300 font-mono">
+                      VALID THRU 11/29
                     </span>
                   </div>
                 </div>
-              </div>
 
-              {/* CARD STATUS & FINANCIAL METRICS SECTION */}
-              {isApproved ? (
-                /* APPROVED STATE: Balance, Used Amount, Card Worth */
-                <div className="space-y-4">
-                  {/* Financial Stats Card */}
-                  <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 space-y-4">
-                    <div className="flex items-center justify-between pb-2 border-b border-akr-border/60">
-                      <div>
-                        <span className="text-[11px] text-akr-text-muted uppercase font-bold block">
-                          Card Credit Limit (Total Worth)
+                {/* Card Bottom: Integrated Dashboard Panel on the face of the card */}
+                {isApproved ? (
+                  <div className="relative z-10 rounded-xl p-2.5 sm:p-3 bg-black/65 backdrop-blur-md border border-akr-gold/40 shadow-inner">
+                    <div className="grid grid-cols-3 gap-2 items-center">
+                      {/* Credit Limit */}
+                      <div className="text-left">
+                        <span className="text-[8px] sm:text-[9px] text-zinc-400 uppercase font-bold tracking-wider block">
+                          Credit Limit
                         </span>
-                        <span className="text-xl font-bold font-sans text-akr-gold">
+                        <span className="text-xs sm:text-base font-bold text-akr-gold font-sans tracking-tight">
                           {formatCurrency(totalCreditLimit)}
                         </span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[11px] text-akr-text-muted uppercase font-bold block">
+
+                      {/* Available Balance */}
+                      <div className="text-center border-x border-zinc-700/60 px-1">
+                        <span className="text-[8px] sm:text-[9px] text-zinc-400 uppercase font-bold tracking-wider block">
                           Available Balance
                         </span>
-                        <span className="text-xl font-bold font-sans text-emerald-400">
+                        <span className="text-xs sm:text-base font-bold text-emerald-400 font-sans tracking-tight">
                           {formatCurrency(availableBalance)}
                         </span>
                       </div>
+
+                      {/* Used Amount & Meter */}
+                      <div className="text-right">
+                        <div className="flex items-center justify-between text-[8px] sm:text-[9px] text-zinc-400 font-mono mb-1">
+                          <span>Used:</span>
+                          <span className="font-bold text-white">{formatCurrency(usedAmount)}</span>
+                        </div>
+                        {/* Slim Usage Bar */}
+                        <div className="w-full h-1.5 rounded-full bg-zinc-800 border border-zinc-700/60 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-akr-gold rounded-full transition-all duration-500"
+                            style={{ width: `${Math.max(usedAmount > 0 ? 5 : 0, utilizationRate)}%` }}
+                          />
+                        </div>
+                        <span className="text-[7.5px] sm:text-[8px] text-amber-300/90 font-medium tracking-tight block mt-1">
+                          0% Interest Weekly EMI
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative z-10 flex items-center justify-between text-[10px] text-amber-200/90 font-medium pt-1">
+                    <span>AKR Store Privilege Financing</span>
+                    <span>0% Interest Weekly EMIs</span>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD STATUS & CONTROLS SECTION */}
+              {isApproved ? (
+                /* APPROVED STATE: Card Controls & Active EMIs */
+                <div className="space-y-4">
+                  {/* Card In-Store Security & Usage Controls */}
+                  <div className="p-4 rounded-card bg-akr-surface border border-akr-border/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-akr-text-muted flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-akr-gold" />
+                        <span>Card Security & In-Store Controls</span>
+                      </h4>
+                      <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
+                        Protected
+                      </span>
                     </div>
 
-                    {/* Utilization Bar */}
-                    <div>
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="text-zinc-400">
-                          Used Amount: <strong className="text-white">{formatCurrency(usedAmount)}</strong>
-                        </span>
-                        <span className="text-zinc-400 font-mono">
-                          {utilizationRate}% Utilized
-                        </span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2.5 rounded-xl bg-akr-bg border border-akr-border/60 flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-white text-[11px]">In-Store Purchases</p>
+                          <p className="text-[9px] text-zinc-400">Silk sarees & retail</p>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-400">Active</span>
                       </div>
-                      <div className="w-full h-2.5 rounded-full bg-zinc-800 overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-amber-500 rounded-full transition-all duration-500"
-                          style={{ width: `${utilizationRate}%` }}
-                        />
-                      </div>
-                    </div>
 
-                    {/* Summary row */}
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
-                      <div className="p-2 rounded-xl bg-akr-bg border border-akr-border/60">
-                        <span className="text-[10px] text-zinc-500 block uppercase font-medium">Interest Rate</span>
-                        <span className="font-bold text-white text-[11px]">0% Weekly</span>
-                      </div>
-                      <div className="p-2 rounded-xl bg-akr-bg border border-akr-border/60">
-                        <span className="text-[10px] text-zinc-500 block uppercase font-medium">Active EMIs</span>
-                        <span className="font-bold text-white text-[11px]">{activePlans.length} Active</span>
-                      </div>
-                      <div className="p-2 rounded-xl bg-akr-bg border border-akr-border/60">
-                        <span className="text-[10px] text-zinc-500 block uppercase font-medium">Card Status</span>
-                        <span className="font-bold text-emerald-400 text-[11px]">Approved</span>
+                      <div className="p-2.5 rounded-xl bg-akr-bg border border-akr-border/60 flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-white text-[11px]">Contactless Tap</p>
+                          <p className="text-[9px] text-zinc-400">Store POS machine tap</p>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-400">Active</span>
                       </div>
                     </div>
                   </div>

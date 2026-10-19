@@ -465,29 +465,34 @@ export const ConsumerDetailsScreen: React.FC = () => {
               </button>
             </div>
 
-            {/* Visual Single EMI Card */}
+            {/* Visual Single All-in-One EMI Privilege Card */}
             <div
               onClick={() => navigate('/app/cards')}
-              className="relative w-full aspect-[1.586/1] max-w-md mx-auto rounded-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-2xl bg-gradient-to-tr from-[#161208] via-[#33260C] to-[#614B1A] border border-[#D4AF37]/60 cursor-pointer group hover:border-akr-gold transition-all"
+              className="relative w-full min-h-[220px] sm:min-h-[240px] aspect-[1.48/1] max-w-md mx-auto rounded-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-2xl bg-gradient-to-tr from-[#141008] via-[#2A1F0B] to-[#4A3714] border border-[#D4AF37]/60 cursor-pointer group hover:border-akr-gold transition-all"
             >
               {/* Metallic Sheen Overlay */}
               <div className="absolute inset-0 bg-gold-card-sheen opacity-70 pointer-events-none" />
 
               {/* Card Top: Branding & Chip */}
               <div className="relative z-10 flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="font-serif font-bold text-sm sm:text-base tracking-wider text-[#F3D98B]">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-akr-gold via-amber-400 to-akr-gold-dark text-black flex items-center justify-center font-serif font-black text-xs sm:text-sm shadow-md">
                     AKR
-                  </span>
-                  <span className="text-[7px] sm:text-[8px] uppercase tracking-widest text-zinc-300">
-                    Credit Capital
-                  </span>
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="font-serif font-bold text-xs sm:text-sm tracking-wider text-[#F3D98B] leading-tight">
+                      AKR CREDIT CAPITAL
+                    </span>
+                    <span className="text-[7px] sm:text-[8px] uppercase tracking-widest text-zinc-300">
+                      Store EMI Privilege Card
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   {/* Status Pill on Card */}
                   {isApproved ? (
-                    <span className="flex items-center gap-1 text-[8px] sm:text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    <span className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       ACTIVE
                     </span>
@@ -504,61 +509,84 @@ export const ConsumerDetailsScreen: React.FC = () => {
                   )}
 
                   {/* Golden EMV Chip */}
-                  <div className="w-8 h-6 sm:w-9 sm:h-7 rounded bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border border-amber-600/60 flex items-center justify-center opacity-95 shadow-inner">
-                    <div className="w-6 h-4 sm:w-7 sm:h-5 border border-amber-700/50 rounded-sm" />
+                  <div className="w-8 h-6 sm:w-9 sm:h-7 rounded bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border border-amber-600/70 flex items-center justify-center opacity-95 shadow-inner">
+                    <div className="w-6 h-4 sm:w-7 sm:h-5 border border-amber-700/60 rounded-xs" />
                   </div>
                 </div>
               </div>
 
               {/* Card Middle: Title & Masked Number */}
-              <div className="relative z-10 my-auto">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-widest text-[#F3D98B]">
-                    EMI PRIVILEGE CARD
-                  </span>
-                </div>
-                <p className="text-sm sm:text-lg text-white font-mono tracking-widest drop-shadow">
-                  {isApproved ? maskedCardNumber : '•••• •••• •••• ••••'}
-                </p>
-              </div>
-
-              {/* Card Bottom: Holder Name, Valid Thru & Network */}
-              <div className="relative z-10 flex items-end justify-between">
+              <div className="relative z-10 flex items-center justify-between my-auto py-1">
                 <div>
+                  <div className="text-[7.5px] sm:text-[8.5px] uppercase tracking-widest text-amber-200/80 font-mono mb-0.5">
+                    EMI CARD NUMBER
+                  </div>
+                  <p className="text-sm sm:text-lg text-white font-mono font-bold tracking-widest drop-shadow">
+                    {isApproved ? maskedCardNumber : '•••• •••• •••• ••••'}
+                  </p>
+                </div>
+
+                <div className="text-right">
                   <span className="text-[7px] sm:text-[8px] uppercase tracking-wider text-zinc-400 block font-mono">
                     CARDHOLDER
                   </span>
-                  <span className="text-[11px] sm:text-xs font-bold font-mono tracking-wide text-white drop-shadow">
+                  <span className="text-[11px] sm:text-xs font-bold font-mono tracking-wide text-white drop-shadow block">
                     {cardholderName}
                   </span>
-                </div>
-
-                <div className="text-[8px] sm:text-[9px] uppercase tracking-wider text-zinc-300 font-mono text-center">
-                  <div>VALID THRU</div>
-                  <div className="font-semibold text-white">10/31</div>
-                </div>
-
-                <div className="flex items-center">
-                  <span className="font-sans font-black italic text-base sm:text-lg tracking-tighter text-white drop-shadow">
-                    VISA
+                  <span className="text-[7.5px] text-zinc-300 font-mono">
+                    VALID THRU 11/29
                   </span>
                 </div>
               </div>
+
+              {/* Card Bottom: Integrated Dashboard Panel on the face of the card */}
+              {isApproved ? (
+                <div className="relative z-10 rounded-xl p-2.5 bg-black/65 backdrop-blur-md border border-akr-gold/40 shadow-inner">
+                  <div className="grid grid-cols-3 gap-1.5 items-center">
+                    <div className="text-left">
+                      <span className="text-[7.5px] sm:text-[8px] text-zinc-400 uppercase font-bold tracking-wider block">
+                        Credit Limit
+                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-akr-gold font-sans tracking-tight">
+                        {formatCurrency(totalCreditLimit)}
+                      </span>
+                    </div>
+
+                    <div className="text-center border-x border-zinc-700/60 px-1">
+                      <span className="text-[7.5px] sm:text-[8px] text-zinc-400 uppercase font-bold tracking-wider block">
+                        Available Balance
+                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-emerald-400 font-sans tracking-tight">
+                        {formatCurrency(availableBalance)}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="flex items-center justify-between text-[7.5px] sm:text-[8px] text-zinc-400 font-mono mb-0.5">
+                        <span>Used:</span>
+                        <span className="font-bold text-white">{formatCurrency(usedAmount)}</span>
+                      </div>
+                      <div className="w-full h-1 rounded-full bg-zinc-800 border border-zinc-700/60 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-400 to-akr-gold rounded-full"
+                          style={{ width: `${Math.max(usedAmount > 0 ? 5 : 0, totalCreditLimit > 0 ? (usedAmount / totalCreditLimit) * 100 : 0)}%` }}
+                        />
+                      </div>
+                      <span className="text-[7px] text-amber-300/90 font-medium block mt-0.5">
+                        0% Weekly EMI
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative z-10 flex items-center justify-between text-[9px] text-amber-200/90 font-medium pt-1">
+                  <span>AKR Store Privilege Financing</span>
+                  <span>0% Interest Weekly EMIs</span>
+                </div>
+              )}
             </div>
 
-            {/* Quick Limit or Apply CTA underneath */}
-            {isApproved ? (
-              <div className="p-3 rounded-xl bg-akr-surface border border-akr-border/80 flex items-center justify-between text-xs">
-                <div>
-                  <span className="text-[10px] text-zinc-400 uppercase block">Credit Limit</span>
-                  <span className="font-bold text-akr-gold">{formatCurrency(totalCreditLimit)}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-zinc-400 uppercase block">Available Balance</span>
-                  <span className="font-bold text-emerald-400">{formatCurrency(availableBalance)}</span>
-                </div>
-              </div>
-            ) : isPending ? (
+            {isPending && (
               <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between text-xs">
                 <span className="text-amber-300">Application submitted • In review by admin</span>
                 <button
@@ -569,7 +597,9 @@ export const ConsumerDetailsScreen: React.FC = () => {
                   View Status
                 </button>
               </div>
-            ) : (
+            )}
+
+            {!isApproved && !isPending && (
               <div className="p-3.5 rounded-xl bg-akr-surface border border-akr-gold/40 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-akr-gold uppercase font-bold block">Pre-Approved Limit</span>
