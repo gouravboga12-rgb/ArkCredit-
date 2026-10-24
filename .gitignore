@@ -33,4 +33,5 @@ playwright/.cache/
 *.pdf
 *prompt*
 image*.png
-
+*.pem
+.env*

@@ -14,6 +14,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    proxy: {
+      '/api': {
+        target: 'http://98.130.105.188',
+        changeOrigin: true,
+      },
+    },
   },
   test: {
     globals: true,
