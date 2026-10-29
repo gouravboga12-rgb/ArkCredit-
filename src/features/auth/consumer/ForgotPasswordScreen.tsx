@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Mail, KeyRound, Lock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mail, KeyRound, Lock, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { consumerAuthService } from '../../../services/consumerAuthService';
 import { AkrLogo } from '../../../assets/logo';
 import { GoldButton, InputField } from '../../../components/ui';
@@ -9,23 +9,42 @@ export const ForgotPasswordScreen: React.FC = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState<'identifier' | 'otp' | 'new_password' | 'success'>('identifier');
   const [identifier, setIdentifier] = useState('rahul@example.com');
+  const [maskedEmail, setMaskedEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    let interval: any;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!identifier.trim()) {
-      setError('Please enter your registered email or mobile');
+      setError('Please enter your registered email, mobile, or account ID');
       return;
     }
     try {
       setIsLoading(true);
       setError(null);
-      await consumerAuthService.forgotPassword(identifier);
+      setSuccessMsg(null);
+      const res = await consumerAuthService.forgotPassword(identifier);
+      if (res.emailMasked) {
+        setMaskedEmail(res.emailMasked);
+      }
+      setSuccessMsg(res.message || 'Verification code sent successfully');
       setStep('otp');
+      setResendTimer(60);
     } catch (err: any) {
       setError(err.message || 'Identifier not found');
     } finally {
@@ -36,16 +55,16 @@ export const ForgotPasswordScreen: React.FC = () => {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length !== 6) {
-      setError('Please enter a valid 6-digit OTP');
+      setError('Please enter the 6-digit verification code');
       return;
     }
     try {
       setIsLoading(true);
       setError(null);
-      await consumerAuthService.verifyOtp(otp);
+      await consumerAuthService.verifyOtp(otp, identifier, 'forgot_password');
       setStep('new_password');
     } catch (err: any) {
-      setError(err.message || 'Invalid OTP');
+      setError(err.message || 'Invalid or expired OTP');
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +83,7 @@ export const ForgotPasswordScreen: React.FC = () => {
     try {
       setIsLoading(true);
       setError(null);
-      await consumerAuthService.resetPassword(identifier, newPassword);
+      await consumerAuthService.resetPassword(identifier, newPassword, otp);
       setStep('success');
     } catch (err: any) {
       setError(err.message || 'Failed to reset password');
@@ -95,19 +114,26 @@ export const ForgotPasswordScreen: React.FC = () => {
           </div>
         )}
 
+        {successMsg && step === 'otp' && (
+          <div className="mb-4 p-3 rounded-xl bg-emerald-950/60 border border-emerald-800/60 flex items-start gap-2.5 text-xs text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
         {step === 'identifier' && (
           <div>
             <h1 className="text-2xl font-serif font-bold text-white tracking-wide">
               Reset Password
             </h1>
             <p className="text-xs text-akr-text-muted mt-1 mb-6">
-              Enter your registered email address or mobile number to receive a verification OTP.
+              Enter your registered email address, mobile number, or Account ID to receive a verification OTP.
             </p>
 
             <form onSubmit={handleSendOtp} className="space-y-4">
               <InputField
-                label="Registered Email or Mobile"
-                placeholder="e.g. rahul@example.com"
+                label="Registered Email, Mobile or Account ID"
+                placeholder="e.g. rahul@example.com or AKR10004821"
                 icon={<Mail className="w-4 h-4" />}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
@@ -128,20 +154,35 @@ export const ForgotPasswordScreen: React.FC = () => {
               Enter Verification Code
             </h1>
             <p className="text-xs text-akr-text-muted mt-1 mb-4">
-              We sent a 6-digit OTP code to <strong className="text-white">{identifier}</strong>.
+              We sent a 6-digit OTP code to{' '}
+              <strong className="text-white">{maskedEmail || identifier}</strong> from{' '}
+              <span className="text-akr-gold">creditsupportakr@gmail.com</span>.
             </p>
 
-            <div className="p-2.5 rounded-xl bg-zinc-900 border border-akr-gold/30 text-xs text-akr-gold mb-6 flex items-center justify-between">
-              <span>Prototype Hint:</span>
-              <span className="font-mono font-bold tracking-widest text-sm bg-black px-2 py-0.5 rounded border border-zinc-700">
-                123456
+            <div className="p-3 rounded-xl bg-zinc-900 border border-akr-gold/30 text-xs text-zinc-300 mb-6 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-akr-gold">
+                <span>✉️</span> Check your inbox & spam folder
               </span>
+              {resendTimer > 0 ? (
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  Resend in {resendTimer}s
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleSendOtp()}
+                  disabled={isLoading}
+                  className="text-[11px] text-akr-gold hover:underline flex items-center gap-1 font-medium"
+                >
+                  <RefreshCw className="w-3 h-3" /> Resend Code
+                </button>
+              )}
             </div>
 
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <InputField
-                label="6-Digit OTP"
-                placeholder="123456"
+                label="6-Digit Verification Code"
+                placeholder="e.g. 849201"
                 maxLength={6}
                 icon={<KeyRound className="w-4 h-4" />}
                 value={otp}

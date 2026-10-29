@@ -47,7 +47,7 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
                   ? 'border-akr-danger focus:ring-1 focus:ring-akr-danger focus:border-akr-danger'
                   : 'border-akr-border focus:border-akr-gold focus:ring-1 focus:ring-akr-gold/40'
               }
-              ${props.readOnly ? 'bg-akr-bg text-akr-text-muted cursor-not-allowed' : ''}
+              ${props.readOnly || props.disabled ? 'bg-zinc-900/90 text-zinc-400 cursor-not-allowed border-zinc-800' : ''}
               ${className}
             `}
             {...props}

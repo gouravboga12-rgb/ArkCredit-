@@ -7,6 +7,8 @@ const ConsumerSchema = new mongoose.Schema({
   email: { type: String, required: true, index: true },
   address: { type: String, default: '' },
   accountNumber: { type: String, index: true },
+  googleId: { type: String, default: null, index: true },
+  avatarUrl: { type: String, default: '' },
   status: { type: String, enum: ['active', 'blocked', 'pending'], default: 'active' },
   passwordHash: { type: String, default: 'Demo@123' },
   cardApproved: { type: Boolean, default: false },

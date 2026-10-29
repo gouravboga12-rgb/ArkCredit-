@@ -37,7 +37,9 @@ export interface Consumer {
   email: string;
   address: string;
   accountNumber: string;
-  status: 'active' | 'inactive';
+  googleId?: string;
+  avatarUrl?: string;
+  status: 'active' | 'inactive' | 'blocked' | 'pending';
   passwordHash: string; // mock
   createdAt: string;
   cardApproved?: boolean; // Only approved users appear in admin consumers page
@@ -51,6 +53,21 @@ export interface Consumer {
     emiReminders: boolean;
     promotionalOffers: boolean;
   };
+}
+
+export interface GoogleProfileInfo {
+  googleId: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+  emailVerified?: boolean;
+}
+
+export interface GoogleCheckResponse {
+  isNewUser: boolean;
+  exists: boolean;
+  message?: string;
+  googleProfile: GoogleProfileInfo;
 }
 
 export interface AdminUser {

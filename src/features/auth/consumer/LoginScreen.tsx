@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Lock, AlertCircle, Sparkles } from 'lucide-react';
+import { useGoogleLogin } from '@react-oauth/google';
+import { Mail, Lock, AlertCircle, Sparkles, UserPlus } from 'lucide-react';
 import { consumerLoginSchema, ConsumerLoginFormData } from '../../../core/validation';
 import { consumerAuthService } from '../../../services/consumerAuthService';
 import { AkrLogo } from '../../../assets/logo';
@@ -12,6 +13,7 @@ export const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
   const [serverError, setServerError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isNotRegisteredError, setIsNotRegisteredError] = useState(false);
 
   const {
     register,
@@ -29,6 +31,7 @@ export const LoginScreen: React.FC = () => {
   const onSubmit = async (data: ConsumerLoginFormData) => {
     try {
       setServerError(null);
+      setIsNotRegisteredError(false);
       await consumerAuthService.login(data.identifier, data.password);
       navigate('/app/home');
     } catch (err: any) {
@@ -36,23 +39,41 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    try {
-      setIsGoogleLoading(true);
-      setServerError(null);
-      await consumerAuthService.loginWithGoogle();
-      navigate('/app/home');
-    } catch (err: any) {
-      setServerError(err.message || 'Google sign in failed');
-    } finally {
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        setIsGoogleLoading(true);
+        setServerError(null);
+        setIsNotRegisteredError(false);
+        await consumerAuthService.loginWithGoogle({
+          accessToken: tokenResponse.access_token,
+        });
+        navigate('/app/home');
+      } catch (err: any) {
+        if (err.data?.code === 'ACCOUNT_NOT_FOUND' || err.status === 404) {
+          setIsNotRegisteredError(true);
+          setServerError(
+            err.data?.error ||
+              'No account found with this Google email. Please complete Sign Up first.'
+          );
+        } else {
+          setServerError(err.message || 'Google sign-in failed');
+        }
+      } finally {
+        setIsGoogleLoading(false);
+      }
+    },
+    onError: (error) => {
+      console.warn('Google Sign-In canceled or failed:', error);
       setIsGoogleLoading(false);
-    }
-  };
+    },
+  });
 
   const fillDemo = (id: string, pass: string) => {
     setValue('identifier', id, { shouldValidate: true });
     setValue('password', pass, { shouldValidate: true });
     setServerError(null);
+    setIsNotRegisteredError(false);
   };
 
   return (
@@ -109,9 +130,21 @@ export const LoginScreen: React.FC = () => {
 
         {/* Server Error Alert */}
         {serverError && (
-          <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-800/60 flex items-start gap-2.5 text-xs text-red-300">
-            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-            <span>{serverError}</span>
+          <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-800/60 flex flex-col gap-2 text-xs text-red-300">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <span>{serverError}</span>
+            </div>
+            {isNotRegisteredError && (
+              <button
+                type="button"
+                onClick={() => navigate('/app/signup')}
+                className="self-start mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-akr-gold text-black font-semibold text-xs hover:bg-akr-gold-light transition-colors"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Go to Sign Up
+              </button>
+            )}
           </div>
         )}
 
@@ -136,7 +169,10 @@ export const LoginScreen: React.FC = () => {
 
           {/* Continue with Google */}
           <div className="pt-1">
-            <GoogleButton onClick={handleGoogleSignIn} disabled={isGoogleLoading || isSubmitting}>
+            <GoogleButton
+              onClick={() => googleLogin()}
+              disabled={isGoogleLoading || isSubmitting}
+            >
               {isGoogleLoading ? 'Connecting Google...' : 'Continue with Google'}
             </GoogleButton>
           </div>

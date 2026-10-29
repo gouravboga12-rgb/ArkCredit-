@@ -18,6 +18,7 @@ import {
   PaymentMode,
   DueStatus,
   CardRequest,
+  GoogleCheckResponse,
 } from '../types';
 
 export class ApiClientError extends Error {
@@ -109,9 +110,30 @@ export const consumerApi = {
       body: JSON.stringify({ identifier, password }),
     }),
 
-  loginWithGoogle: () =>
-    request<ConsumerSession>('/consumer/auth/google', {
+  loginWithGoogle: (payload?: { credential?: string; accessToken?: string }) =>
+    request<ConsumerSession>('/consumer/auth/google/login', {
       method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+
+  checkGoogleAccount: (payload: { credential?: string; accessToken?: string }) =>
+    request<GoogleCheckResponse>('/consumer/auth/google/check', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  registerWithGoogle: (payload: {
+    credential?: string;
+    accessToken?: string;
+    fullName: string;
+    mobile: string;
+    email: string;
+    password: string;
+    address?: string;
+  }) =>
+    request<ConsumerSession>('/consumer/auth/google/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 
   signUp: (payload: {
@@ -120,28 +142,54 @@ export const consumerApi = {
     email: string;
     password: string;
     address?: string;
+    otp?: string;
   }) =>
     request<ConsumerSession>('/consumer/auth/signup', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
 
+  sendSignUpOtp: (payload: { fullName: string; mobile: string; email: string }) =>
+    request<{ success: boolean; message: string; expiresInMinutes?: number }>(
+      '/consumer/auth/signup/send-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    ),
+
+  verifySignUpAndCreate: (payload: {
+    fullName: string;
+    mobile: string;
+    email: string;
+    password: string;
+    address?: string;
+    otp: string;
+  }) =>
+    request<ConsumerSession>('/consumer/auth/signup/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   forgotPassword: (identifier: string) =>
-    request<{ message: string }>('/consumer/auth/forgot-password', {
+    request<{ message: string; emailMasked?: string; email?: string }>(
+      '/consumer/auth/forgot-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({ identifier }),
+      }
+    ),
+
+  verifyOtp: (otp: string, identifier?: string, purpose: string = 'forgot_password') =>
+    request<{ valid: boolean; message?: string }>('/consumer/auth/verify-otp', {
       method: 'POST',
-      body: JSON.stringify({ identifier }),
+      body: JSON.stringify({ otp, identifier, purpose }),
     }),
 
-  verifyOtp: (otp: string) =>
-    request<{ valid: boolean }>('/consumer/auth/verify-otp', {
-      method: 'POST',
-      body: JSON.stringify({ otp }),
-    }),
-
-  resetPassword: (identifier: string, newPassword: string) =>
+  resetPassword: (identifier: string, newPassword: string, otp?: string) =>
     request<{ success: boolean; message: string }>('/consumer/auth/reset-password', {
       method: 'POST',
-      body: JSON.stringify({ identifier, newPassword }),
+      body: JSON.stringify({ identifier, newPassword, otp }),
     }),
 
   // Profile

@@ -5,7 +5,7 @@
  */
 
 import { consumerApi } from '../core/api';
-import { ConsumerSession } from '../core/types';
+import { ConsumerSession, GoogleCheckResponse } from '../core/types';
 import { useStore } from '../store';
 
 const CONSUMER_SESSION_KEY = 'akr_consumer_session';
@@ -18,39 +18,86 @@ export const consumerAuthService = {
     return session;
   },
 
-  // REPLACE WITH API
-  loginWithGoogle: async (): Promise<ConsumerSession> => {
-    const session = await consumerApi.loginWithGoogle();
+  // Login with Google (Registered users only)
+  loginWithGoogle: async (payload?: {
+    credential?: string;
+    accessToken?: string;
+  }): Promise<ConsumerSession> => {
+    const session = await consumerApi.loginWithGoogle(payload);
     useStore.getState().setConsumerSession(session);
     return session;
   },
 
-  // REPLACE WITH API
-  signUp: async (data: {
+  // Check if a Google account is new or already registered
+  checkGoogleAccount: async (payload: {
+    credential?: string;
+    accessToken?: string;
+  }): Promise<GoogleCheckResponse> => {
+    return consumerApi.checkGoogleAccount(payload);
+  },
+
+  // Register a new user via Google Sign-Up + basic registration details
+  registerWithGoogle: async (payload: {
+    credential?: string;
+    accessToken?: string;
     fullName: string;
     mobile: string;
     email: string;
     password: string;
     address?: string;
   }): Promise<ConsumerSession> => {
+    const session = await consumerApi.registerWithGoogle(payload);
+    useStore.getState().setConsumerSession(session);
+    return session;
+  },
+
+  // Standard sign up
+  signUp: async (data: {
+    fullName: string;
+    mobile: string;
+    email: string;
+    password: string;
+    address?: string;
+    otp?: string;
+  }): Promise<ConsumerSession> => {
     const session = await consumerApi.signUp(data);
     useStore.getState().setConsumerSession(session);
     return session;
   },
 
-  // REPLACE WITH API
+  // Send Registration OTP to Email
+  sendSignUpOtp: async (data: {
+    fullName: string;
+    mobile: string;
+    email: string;
+  }) => {
+    return consumerApi.sendSignUpOtp(data);
+  },
+
+  // Verify Registration OTP & Complete Account Creation
+  verifySignUpAndCreate: async (data: {
+    fullName: string;
+    mobile: string;
+    email: string;
+    password: string;
+    address?: string;
+    otp: string;
+  }): Promise<ConsumerSession> => {
+    const session = await consumerApi.verifySignUpAndCreate(data);
+    useStore.getState().setConsumerSession(session);
+    return session;
+  },
+
   forgotPassword: async (identifier: string) => {
     return consumerApi.forgotPassword(identifier);
   },
 
-  // REPLACE WITH API
-  verifyOtp: async (otp: string) => {
-    return consumerApi.verifyOtp(otp);
+  verifyOtp: async (otp: string, identifier?: string, purpose: string = 'forgot_password') => {
+    return consumerApi.verifyOtp(otp, identifier, purpose);
   },
 
-  // REPLACE WITH API
-  resetPassword: async (identifier: string, newPass: string) => {
-    return consumerApi.resetPassword(identifier, newPass);
+  resetPassword: async (identifier: string, newPass: string, otp?: string) => {
+    return consumerApi.resetPassword(identifier, newPass, otp);
   },
 
   logout: () => {
