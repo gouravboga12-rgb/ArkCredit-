@@ -247,7 +247,7 @@ export const HomeScreen: React.FC = () => {
         {/* Greeting Section */}
         <div className="text-left pt-1">
           <h2 className="text-xl font-bold font-sans text-white flex items-center gap-2">
-            <span>Hello, {consumer?.name || 'Rahul Sharma'}</span>
+            <span>Hello, {consumer?.name || 'Valued Member'}</span>
             <span className="text-xl">👋</span>
           </h2>
           <p className="text-xs text-akr-text-muted mt-0.5">

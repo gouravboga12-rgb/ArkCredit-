@@ -179,7 +179,7 @@ export const CardApplicationModal: React.FC<CardApplicationModalProps> = ({
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. Rahul Sharma"
+                placeholder="Full name as per Aadhaar"
                 className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-xs outline-none focus:border-akr-gold"
                 required
               />

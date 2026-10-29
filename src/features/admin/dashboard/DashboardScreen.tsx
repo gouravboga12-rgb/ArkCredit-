@@ -211,10 +211,10 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <div>
             <div className="text-2xl font-extrabold text-white">
-              {stats?.totalConsumers || consumers.length}
+              {stats ? stats.totalConsumers : consumers.length}
             </div>
             <p className="text-[11px] text-zinc-400 mt-1">
-              {stats?.activeConsumers || consumers.filter((c) => c.status === 'active').length} active accounts
+              {stats ? stats.activeConsumers : consumers.filter((c) => c.status === 'active').length} active accounts
             </p>
           </div>
         </div>
@@ -231,7 +231,7 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <div>
             <div className="text-2xl font-extrabold text-white">
-              {formatCurrency(stats?.totalOutstanding || 145000)}
+              {formatCurrency(stats?.totalOutstanding ?? 0)}
             </div>
             <p className="text-[11px] text-zinc-400 mt-1">Across all active plans</p>
           </div>
@@ -249,10 +249,10 @@ export const DashboardScreen: React.FC = () => {
           </div>
           <div>
             <div className="text-2xl font-extrabold text-white">
-              {formatCurrency(stats?.totalCollected || 120000)}
+              {formatCurrency(stats?.totalCollected ?? 0)}
             </div>
-            <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
-              <ArrowUpRight className="w-3.5 h-3.5" /> +14.2% month-over-month
+            <p className="text-[11px] text-zinc-400 mt-1">
+              Total collections received
             </p>
           </div>
         </div>
@@ -535,7 +535,7 @@ export const DashboardScreen: React.FC = () => {
                 return (
                   <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
                     <td className="py-3 px-4 font-bold text-white">
-                      {consumer?.name || 'Rahul Sharma'}
+                      {consumer?.name || 'Customer'}
                     </td>
                     <td className="py-3 px-4 font-mono text-zinc-300">
                       {consumer?.accountNumber || '-'}

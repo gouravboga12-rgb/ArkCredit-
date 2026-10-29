@@ -904,7 +904,7 @@ export const ConsumerManagementScreen: React.FC = () => {
 
           <InputField
             label="Full Name"
-            placeholder="e.g. Rahul Sharma"
+            placeholder="Full name as per Aadhaar"
             error={errors.name?.message}
             {...register('name')}
           />

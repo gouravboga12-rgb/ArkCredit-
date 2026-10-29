@@ -77,7 +77,7 @@ export const ReceiptScreen: React.FC = () => {
       addRow('Receipt Number:', payment.reference || payment.transactionRef);
       addRow('Transaction ID:', payment.transactionRef);
       addRow('Date & Time:', formatDisplayDate(payment.createdAt, true));
-      addRow('Account Holder:', consumer?.name || 'Rahul Sharma');
+      addRow('Account Holder:', consumer?.name || 'Consumer');
       addRow('Account Number:', maskAccount(consumer?.accountNumber));
       addRow('Plan Title:', plan?.title || 'EMI / Dues Payment');
       addRow('Payment Mode:', payment.mode);
@@ -150,7 +150,7 @@ export const ReceiptScreen: React.FC = () => {
             <div className="py-4 space-y-3 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-akr-text-muted">Account Holder</span>
-                <span className="font-bold text-white">{consumer?.name || 'Rahul Sharma'}</span>
+                <span className="font-bold text-white">{consumer?.name || 'Consumer'}</span>
               </div>
 
               <div className="flex justify-between items-center">

@@ -24,3 +24,4 @@ const cardRequestSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('CardRequest', cardRequestSchema);
+

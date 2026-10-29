@@ -289,7 +289,7 @@ export const ConsumerDetailsScreen: React.FC = () => {
                   Account Holder
                 </span>
                 <div className="text-sm font-bold text-white mt-0.5">
-                  {consumer?.name || 'Rahul Sharma'}
+                  {consumer?.name || 'Consumer'}
                 </div>
               </div>
             </div>
