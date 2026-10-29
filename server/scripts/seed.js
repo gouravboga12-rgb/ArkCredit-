@@ -53,8 +53,8 @@ async function seed() {
   // 3. Admin Users
   await AdminUser.deleteMany({});
   await AdminUser.insertMany([
-    { id: 'admin_super', name: 'Rajesh Varma', email: 'admin@akr.com', role: 'super_admin', password: 'Demo@123' },
-    { id: 'admin_staff', name: 'Pooja Mehta', email: 'staff@akr.com', role: 'staff', password: 'Demo@123' },
+    { id: 'admin_super', name: 'Rajesh Varma', email: 'admin@akr.com', role: 'super_admin', password: 'Admin@123' },
+    { id: 'admin_staff', name: 'Pooja Mehta', email: 'staff@akr.com', role: 'staff', password: 'Staff@123' },
   ]);
   console.log('Seeded Admin Users');
 
