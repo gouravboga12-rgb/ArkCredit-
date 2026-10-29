@@ -13,7 +13,6 @@ import {
   FileText,
   Edit2,
   ExternalLink,
-  Monitor,
   ArrowRight,
   Sparkles,
   Clock,
@@ -651,24 +650,6 @@ export const ConsumerDetailsScreen: React.FC = () => {
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-zinc-400" />
-            </button>
-
-            {/* Switch to Admin Panel */}
-            <button
-              type="button"
-              onClick={() => navigate('/admin/login')}
-              className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-zinc-800/60 text-akr-gold transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-akr-gold/15 text-akr-gold flex items-center justify-center">
-                  <Monitor className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <h4 className="text-xs font-bold text-white">Admin Business Panel</h4>
-                  <p className="text-[10px] text-zinc-400">Switch to management portal</p>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-akr-gold" />
             </button>
 
             {/* Logout Button */}
