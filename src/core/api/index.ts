@@ -300,6 +300,8 @@ export const adminApi = {
   getConsumerDues: (consumerId: string) =>
     request<DuesPlan[]>(`/admin/consumers/${consumerId}/dues`, {}, 'admin'),
 
+  getDuesPlans: () => request<DuesPlan[]>('/admin/plans', {}, 'admin'),
+
   createDuesPlan: (data: any) =>
     request<DuesPlan>('/admin/dues', {
       method: 'POST',

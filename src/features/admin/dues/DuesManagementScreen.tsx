@@ -130,17 +130,17 @@ export const DuesManagementScreen: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [ptData, cData] = await Promise.all([
-        adminApi.getPlanTypes(),
-        adminApi.getConsumers(),
+      const [ptData, cData, pData] = await Promise.all([
+        adminApi.getPlanTypes().catch(() => []),
+        adminApi.getConsumers().catch(() => []),
+        adminApi.getDuesPlans().catch(() => []),
       ]);
-      setPlanTypes(ptData);
-      setConsumers(cData);
-
-      const state = useStore.getState();
-      setPlans(state.duesPlans);
+      setPlanTypes(ptData || []);
+      setConsumers(cData || []);
+      setPlans(pData || []);
     } catch (err) {
       console.error(err);
+      setPlans([]);
     } finally {
       setLoading(false);
     }

@@ -925,7 +925,7 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'akr_credit_capital_data_store',
-      version: 7,
+      version: 8,
       migrate: (persistedState: any, version: number) => {
         let state = persistedState || {};
         if (version < 4) {
@@ -1077,6 +1077,37 @@ export const useStore = create<StoreState>()(
             cardRequests: updatedRequests,
             consumers: updatedConsumers,
             consumerSession: updatedSession,
+          };
+        }
+        if (version < 8) {
+          // Purge all mock/dummy records from persistent storage
+          state = {
+            ...state,
+            consumers: (state.consumers || []).filter(
+              (c: any) =>
+                !['c_rahul_4821', 'c_sneha_1092', 'c_priya_5512', 'c_amit_9823'].includes(c.id) &&
+                !c.email?.includes('@example.com')
+            ),
+            duesPlans: (state.duesPlans || []).filter(
+              (p: any) => !['plan_priya_1', 'plan_amit_1'].includes(p.id)
+            ),
+            payments: (state.payments || []).filter(
+              (p: any) => !['pay_priya_1', 'pay_mvme2fxj'].includes(p.id)
+            ),
+            cardRequests: (state.cardRequests || []).filter(
+              (r: any) =>
+                !['req_rahul_4821'].includes(r.id) && !r.email?.includes('@example.com')
+            ),
+            notifications: (state.notifications || []).filter(
+              (n: any) => !['notif_welcome'].includes(n.id)
+            ),
+            activityLogs: (state.activityLogs || []).filter(
+              (l: any) => !['log_init'].includes(l.id)
+            ),
+            consumerSession:
+              state.consumerSession?.consumer?.email?.includes('@example.com')
+                ? null
+                : state.consumerSession,
           };
         }
         return state;

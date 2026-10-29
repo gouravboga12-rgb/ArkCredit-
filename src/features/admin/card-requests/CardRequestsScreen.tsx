@@ -32,8 +32,7 @@ import { useStore } from '../../../store';
 import { Modal, StatusBadge, GoldButton, Skeleton } from '../../../components/ui';
 
 export const CardRequestsScreen: React.FC = () => {
-  const storeCardRequests = useStore((state) => state.cardRequests || []);
-  const [requests, setRequests] = useState<CardRequest[]>(storeCardRequests);
+  const [requests, setRequests] = useState<CardRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,31 +64,18 @@ export const CardRequestsScreen: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Sync with store whenever storeCardRequests updates
-  useEffect(() => {
-    if (storeCardRequests && storeCardRequests.length > 0) {
-      setRequests(storeCardRequests);
-    }
-  }, [storeCardRequests]);
-
   const loadRequests = async (showSpinner = false) => {
     try {
       if (showSpinner) setLoading(true);
-      try {
-        await useStore.persist.rehydrate();
-      } catch (e) {}
-
       const data = await adminApi.getCardRequests();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setRequests(data);
       } else {
-        const fallback = useStore.getState().cardRequests || [];
-        setRequests(fallback);
+        setRequests([]);
       }
     } catch (err) {
       console.error('Failed to load card requests', err);
-      const fallback = useStore.getState().cardRequests || [];
-      setRequests(fallback);
+      setRequests([]);
     } finally {
       setLoading(false);
       setIsRefreshing(false);

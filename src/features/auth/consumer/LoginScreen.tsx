@@ -23,8 +23,8 @@ export const LoginScreen: React.FC = () => {
   } = useForm<ConsumerLoginFormData>({
     resolver: zodResolver(consumerLoginSchema),
     defaultValues: {
-      identifier: 'rahul@example.com',
-      password: 'Demo@123',
+      identifier: '',
+      password: '',
     },
   });
 
@@ -69,13 +69,6 @@ export const LoginScreen: React.FC = () => {
     },
   });
 
-  const fillDemo = (id: string, pass: string) => {
-    setValue('identifier', id, { shouldValidate: true });
-    setValue('password', pass, { shouldValidate: true });
-    setServerError(null);
-    setIsNotRegisteredError(false);
-  };
-
   return (
     <div className="flex-1 flex flex-col justify-between px-6 pt-6 pb-4 bg-akr-bg text-white relative overflow-hidden">
       {/* Decorative Gold Sheen Background */}
@@ -95,37 +88,6 @@ export const LoginScreen: React.FC = () => {
           <p className="text-xs text-akr-text-muted mt-1 leading-relaxed">
             Sign in to your AKR Credit Capital account and stay in control.
           </p>
-        </div>
-
-        {/* Demo Fast-Fill Pill */}
-        <div className="mb-5 p-2 rounded-xl bg-zinc-900/90 border border-akr-gold/30 flex items-center justify-between text-[11px]">
-          <span className="text-akr-gold flex items-center gap-1 font-medium">
-            <Sparkles className="w-3.5 h-3.5" /> Fast Demo Fill:
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => fillDemo('AKR10004821', 'Demo@123')}
-              className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 font-mono text-[10px]"
-              title="Login with Customer / Account ID"
-            >
-              Account ID
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('rahul@example.com', 'Demo@123')}
-              className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 font-mono text-[10px]"
-            >
-              Email
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('9876543210', 'Demo@123')}
-              className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 font-mono text-[10px]"
-            >
-              Mobile
-            </button>
-          </div>
         </div>
 
         {/* Server Error Alert */}
@@ -152,7 +114,7 @@ export const LoginScreen: React.FC = () => {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <InputField
             label="Account ID, Mobile Number or Email"
-            placeholder="e.g. AKR10004821, 9876543210, or rahul@example.com"
+            placeholder="e.g. 9876543210, user@gmail.com, or AKR account ID"
             icon={<Mail className="w-4 h-4" />}
             error={errors.identifier?.message}
             {...register('identifier')}

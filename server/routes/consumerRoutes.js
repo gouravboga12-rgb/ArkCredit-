@@ -6,6 +6,7 @@ const OtpToken = require('../models/OtpToken');
 const DuesPlan = require('../models/DuesPlan');
 const Payment = require('../models/Payment');
 const CardType = require('../models/CardType');
+const CardRequest = require('../models/CardRequest');
 const AppNotification = require('../models/AppNotification');
 const { generateOtp, sendOtpEmail } = require('../config/mailer');
 
@@ -746,6 +747,33 @@ router.get('/payments', async (req, res) => {
 router.get('/cards', async (req, res) => {
   const cards = await CardType.find({ enabled: true });
   return res.json(cards);
+});
+
+router.post('/cards/apply', async (req, res) => {
+  try {
+    const consumerId = getConsumerId(req);
+    const id = `req_${Date.now().toString(36)}`;
+    const refNum = `CR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const cardRequest = await CardRequest.create({
+      ...req.body,
+      id,
+      referenceNumber: refNum,
+      consumerId: consumerId || req.body.consumerId,
+      status: 'pending',
+    });
+
+    if (consumerId || req.body.consumerId) {
+      await Consumer.updateOne(
+        { id: consumerId || req.body.consumerId },
+        { $set: { cardStatus: 'pending' } }
+      );
+    }
+
+    return res.status(201).json(cardRequest);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/notifications', async (req, res) => {

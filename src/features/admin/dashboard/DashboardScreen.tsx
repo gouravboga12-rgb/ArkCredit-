@@ -42,21 +42,35 @@ export const DashboardScreen: React.FC = () => {
     upcomingPlansCount: number;
   } | null>(null);
 
-  const duesPlans = useStore((state) => state.duesPlans);
-  const consumers = useStore((state) => state.consumers);
-  const payments = useStore((state) => state.payments);
-  const planTypes = useStore((state) => state.planTypes);
+  const [duesPlans, setDuesPlans] = useState<any[]>([]);
+  const [consumers, setConsumers] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [planTypes, setPlanTypes] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function loadStats() {
+    async function loadDashboardData() {
       try {
-        const data = await adminApi.getDashboard();
-        setStats(data);
+        setIsLoading(true);
+        const [dashStats, plansData, consumersData, paymentsData, ptData] = await Promise.all([
+          adminApi.getDashboard().catch(() => null),
+          adminApi.getDuesPlans().catch(() => []),
+          adminApi.getConsumers().catch(() => []),
+          adminApi.getPayments().catch(() => []),
+          adminApi.getPlanTypes().catch(() => []),
+        ]);
+        if (dashStats) setStats(dashStats);
+        setDuesPlans(plansData || []);
+        setConsumers(consumersData || []);
+        setPayments(paymentsData || []);
+        setPlanTypes(ptData || []);
       } catch (err) {
         console.error('Failed to load dashboard metrics', err);
+      } finally {
+        setIsLoading(false);
       }
     }
-    loadStats();
+    loadDashboardData();
   }, []);
 
   // Upcoming EMIs within next 7 days
@@ -80,20 +94,25 @@ export const DashboardScreen: React.FC = () => {
   const totalOverdueLateFees = overduePlans.reduce((sum, p) => sum + (p.overdueAmount || 0), 0);
   const totalMandatoryOverdue = totalOverdueBase + totalOverdueLateFees;
 
-  // Collections per month data for Recharts Bar Chart
-  const monthlyCollectionsData = [
-    { month: 'Jun 2026', collected: 32000, dues: 45000 },
-    { month: 'Jul 2026', collected: 48500, dues: 52000 },
-    { month: 'Aug 2026', collected: 55000, dues: 58000 },
-    { month: 'Sep 2026', collected: 62000, dues: 64000 },
-    { month: 'Oct 2026', collected: 78500, dues: 85000 },
-  ];
+  // Real Collections per month computed from real payments (or empty)
+  const monthlyCollectionsData = payments.length > 0
+    ? payments.slice(-6).map((p: any) => ({
+        month: new Date(p.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+        collected: Number(p.amount) || 0,
+        dues: Number(stats?.totalOutstanding) || 0,
+      }))
+    : [];
 
   // Outstanding vs Collected Pie Chart Data
-  const pieData = [
-    { name: 'Collected', value: stats?.totalCollected || 120000, color: '#D4AF37' },
-    { name: 'Outstanding', value: stats?.totalOutstanding || 145000, color: '#3A3A40' },
-  ];
+  const hasFinancialData = Boolean((stats?.totalCollected || 0) > 0 || (stats?.totalOutstanding || 0) > 0);
+  const pieData = hasFinancialData
+    ? [
+        { name: 'Collected', value: stats?.totalCollected || 0, color: '#D4AF37' },
+        { name: 'Outstanding', value: stats?.totalOutstanding || 0, color: '#3A3A40' },
+      ]
+    : [
+        { name: 'No Active Dues', value: 1, color: '#27272A' },
+      ];
 
   // Real Excel Exports using SheetJS
   const handleExportDues = () => {

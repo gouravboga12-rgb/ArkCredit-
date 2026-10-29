@@ -366,13 +366,17 @@ export const ConsumerManagementScreen: React.FC = () => {
     setViewingConsumer(c);
     setShowDrawerPassword(false);
     try {
-      const dues = await adminApi.getConsumerDues(c.id);
-      setConsumerDues(dues);
-      const state = useStore.getState();
-      const pays = state.payments.filter((p) => p.consumerId === c.id);
+      const [dues, allPayments] = await Promise.all([
+        adminApi.getConsumerDues(c.id).catch(() => []),
+        adminApi.getPayments().catch(() => []),
+      ]);
+      setConsumerDues(dues || []);
+      const pays = (allPayments || []).filter((p: any) => p.consumerId === c.id);
       setConsumerPayments(pays);
     } catch (err) {
       console.error(err);
+      setConsumerDues([]);
+      setConsumerPayments([]);
     }
   };
 
