@@ -726,7 +726,7 @@ export const HomeScreen: React.FC = () => {
                   status={pay.status}
                   mode={pay.mode}
                   iconType="check"
-                  onClick={() => navigate(`/app/receipt/${pay.id}`)}
+                  onClick={() => navigate('/app/history')}
                 />
               ))}
             </div>

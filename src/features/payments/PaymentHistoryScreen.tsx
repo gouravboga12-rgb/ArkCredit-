@@ -3,12 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import {
   Filter,
   Calendar,
-  Download,
   Search,
   BookOpen,
-  Receipt,
   CheckCircle2,
   Clock,
+  History,
   ArrowRight,
   TrendingUp,
   CreditCard,
@@ -205,7 +204,7 @@ export const PaymentHistoryScreen: React.FC = () => {
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <Receipt className="w-3.5 h-3.5" />
+              <History className="w-3.5 h-3.5" />
               <span>Transaction History</span>
             </button>
             <button
@@ -357,8 +356,7 @@ export const PaymentHistoryScreen: React.FC = () => {
                               status={p.status}
                               mode={p.mode}
                               iconType={isCard ? 'card' : 'rupee'}
-                              onDownload={() => navigate(`/app/receipt/${encodeURIComponent(p.id)}`)}
-                              onClick={() => navigate(`/app/receipt/${encodeURIComponent(p.id)}`)}
+                              onClick={() => setActiveTab('ledger')}
                             />
                           );
                         })}
@@ -536,26 +534,13 @@ export const PaymentHistoryScreen: React.FC = () => {
                                 </div>
                               </div>
 
-                              <div className="text-right flex items-center gap-2">
-                                <div>
-                                  <span className="font-extrabold text-white block">
-                                    {formatCurrency(inst.amount)}
-                                  </span>
-                                  <span className="text-[10px] text-zinc-400 block font-mono">
-                                    0% Interest
-                                  </span>
-                                </div>
-
-                                {inst.payment && (
-                                  <button
-                                    type="button"
-                                    onClick={() => inst.payment && navigate(`/app/receipt/${encodeURIComponent(inst.payment.id)}`)}
-                                    className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-akr-gold border border-zinc-700 transition-colors"
-                                    title="View Receipt"
-                                  >
-                                    <Receipt className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
+                              <div className="text-right">
+                                <span className="font-extrabold text-white block">
+                                  {formatCurrency(inst.amount)}
+                                </span>
+                                <span className="text-[10px] text-zinc-400 block font-mono">
+                                  0% Interest
+                                </span>
                               </div>
                             </div>
                           ))}

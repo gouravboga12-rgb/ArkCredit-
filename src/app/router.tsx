@@ -18,7 +18,6 @@ import { ForgotPasswordScreen } from '../features/auth/consumer/ForgotPasswordSc
 import { HomeScreen } from '../features/home/HomeScreen';
 import { PayDuesScreen } from '../features/payments/PayDuesScreen';
 import { PaymentHistoryScreen } from '../features/payments/PaymentHistoryScreen';
-import { ReceiptScreen } from '../features/payments/ReceiptScreen';
 import { CardsScreen } from '../features/cards/CardsScreen';
 import { ConsumerDetailsScreen } from '../features/profile/ConsumerDetailsScreen';
 import { NotificationsScreen } from '../features/notifications/NotificationsScreen';
@@ -114,11 +113,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'receipt/:paymentId',
-        element: <ReceiptScreen />,
+        element: <Navigate to="/app/history" replace />,
       },
       {
         path: 'receipt/*',
-        element: <ReceiptScreen />,
+        element: <Navigate to="/app/history" replace />,
       },
       {
         path: 'cards',

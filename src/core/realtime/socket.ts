@@ -201,3 +201,4 @@ export function broadcastLocalRealtimeEvent(type: string, payload: any) {
 export function getSocket(): Socket | null {
   return socket;
 }
+

@@ -8,7 +8,7 @@ import {
   XCircle,
   Clock,
   Sparkles,
-  Download,
+  BookOpen,
   ArrowLeft,
   Smartphone,
   CreditCard,
@@ -335,17 +335,10 @@ export const PayDuesScreen: React.FC = () => {
           <div className="space-y-3 max-w-sm mx-auto">
             {isSuccess && (
               <OutlineGoldButton
-                onClick={() => {
-                  const receiptId = paymentResult.payments[0]?.id || paymentResult.receiptNumber;
-                  if (receiptId && receiptId !== 'N/A') {
-                    navigate(`/app/receipt/${encodeURIComponent(receiptId)}`);
-                  } else {
-                    navigate('/app/history');
-                  }
-                }}
-                icon={<Download className="w-4 h-4" />}
+                onClick={() => navigate('/app/history')}
+                icon={<BookOpen className="w-4 h-4" />}
               >
-                View Payment Receipt
+                View Repayment Ledger & History
               </OutlineGoldButton>
             )}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, CheckCircle2, ChevronRight, IndianRupee, CreditCard, Receipt } from 'lucide-react';
+import { CheckCircle2, ChevronRight, IndianRupee, CreditCard, Receipt } from 'lucide-react';
 import { formatCurrency, formatDisplayDate } from '../../core/formatters';
 import { StatusBadge } from './StatusBadge';
 import { PaymentMode } from '../../core/types';
@@ -12,7 +12,6 @@ interface ListRowProps {
   status?: string;
   mode?: PaymentMode;
   iconType?: 'check' | 'rupee' | 'card' | 'receipt';
-  onDownload?: () => void;
   onClick?: () => void;
   className?: string;
 }
@@ -25,7 +24,6 @@ export const ListRow: React.FC<ListRowProps> = ({
   status = 'Success',
   mode,
   iconType = 'rupee',
-  onDownload,
   onClick,
   className = '',
 }) => {
@@ -107,21 +105,9 @@ export const ListRow: React.FC<ListRowProps> = ({
           )}
         </div>
 
-        {onDownload ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDownload();
-            }}
-            aria-label="Download Receipt"
-            className="w-8 h-8 rounded-full bg-akr-bg text-akr-text-muted hover:text-akr-gold hover:border-akr-gold border border-akr-border flex items-center justify-center transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-          </button>
-        ) : onClick ? (
+        {onClick && (
           <ChevronRight className="w-4 h-4 text-akr-text-dim group-hover:text-akr-gold transition-colors" />
-        ) : null}
+        )}
       </div>
     </div>
   );
