@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   User,
+  UserCheck,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { adminAuthService } from '../../services/adminAuthService';
@@ -40,6 +41,12 @@ export const AdminLayout: React.FC = () => {
       label: 'Dashboard',
       path: '/admin/dashboard',
       icon: LayoutDashboard,
+      superOnly: false,
+    },
+    {
+      label: 'Registered Users',
+      path: '/admin/users',
+      icon: UserCheck,
       superOnly: false,
     },
     {
@@ -90,7 +97,7 @@ export const AdminLayout: React.FC = () => {
   // Selected quick nav items for mobile/tablet bottom bar
   const quickNavItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Consumers', path: '/admin/consumers', icon: Users },
+    { label: 'Users', path: '/admin/users', icon: UserCheck },
     { label: 'Dues', path: '/admin/dues', icon: IndianRupee },
     { label: 'Requests', path: '/admin/card-requests', icon: FileText, badge: pendingRequestsCount },
   ];

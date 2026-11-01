@@ -19,6 +19,7 @@ import {
   DueStatus,
   CardRequest,
   GoogleCheckResponse,
+  RegisteredUser,
 } from '../types';
 
 export class ApiClientError extends Error {
@@ -417,4 +418,17 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }, 'admin'),
+
+  // Registered Users Directory & Card Invitations
+  getRegisteredUsers: () => request<RegisteredUser[]>('/admin/users', {}, 'admin'),
+
+  sendCardInvite: (consumerId: string, customMessage?: string) =>
+    request<{ success: boolean; message: string; notification: AppNotification }>(
+      `/admin/users/${consumerId}/send-card-invite`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ customMessage }),
+      },
+      'admin'
+    ),
 };

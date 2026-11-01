@@ -47,6 +47,8 @@ export const NotificationsScreen: React.FC = () => {
 
   const getNotifIcon = (type: string) => {
     switch (type) {
+      case 'card_invite':
+        return <CreditCard className="w-4 h-4 text-akr-gold" />;
       case 'emi_reminder':
         return <Calendar className="w-4 h-4 text-amber-400" />;
       case 'payment_confirmation':
@@ -122,6 +124,19 @@ export const NotificationsScreen: React.FC = () => {
                     <p className="text-xs text-akr-text-muted mt-1 leading-relaxed">
                       {notif.message}
                     </p>
+                    {notif.type === 'card_invite' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/app/cards');
+                        }}
+                        className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-akr-gold text-black font-bold text-[11px] shadow-sm hover:brightness-105 transition-all"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Complete Card Application →</span>
+                      </button>
+                    )}
                     <span className="text-[10px] text-zinc-500 mt-2 block">
                       {formatDisplayDate(notif.createdAt, true)}
                     </span>

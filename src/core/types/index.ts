@@ -149,9 +149,16 @@ export interface AppNotification {
   consumerId: string | null; // null for broadcast to all consumers
   title: string;
   message: string;
-  type: 'emi_reminder' | 'payment_confirmation' | 'balance_update' | 'general';
+  type: 'emi_reminder' | 'payment_confirmation' | 'balance_update' | 'card_invite' | 'general';
   read: boolean;
   createdAt: string;
+}
+
+export interface RegisteredUser extends Consumer {
+  hasApplied?: boolean;
+  inviteSent?: boolean;
+  inviteSentAt?: string;
+  cardRequestId?: string;
 }
 
 export interface ActivityLog {

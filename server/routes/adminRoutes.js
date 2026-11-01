@@ -500,4 +500,100 @@ router.post('/notifications', async (req, res) => {
   }
 });
 
+// 13. Registered Users Directory & Card Application Tracking
+router.get('/users', async (req, res) => {
+  try {
+    const consumers = await Consumer.find().sort({ createdAt: -1 });
+    const cardRequests = await CardRequest.find();
+    const invites = await AppNotification.find({ type: 'card_invite' });
+
+    const requestsByConsumer = new Map();
+    cardRequests.forEach((r) => {
+      if (r.consumerId) requestsByConsumer.set(r.consumerId, r);
+      if (r.phone) requestsByConsumer.set(r.phone, r);
+      if (r.email) requestsByConsumer.set(r.email.toLowerCase(), r);
+    });
+
+    const invitesByConsumer = new Map();
+    invites.forEach((inv) => {
+      if (inv.consumerId) {
+        invitesByConsumer.set(inv.consumerId, inv);
+      }
+    });
+
+    const result = consumers.map((c) => {
+      const cObj = c.toObject();
+      const matchedRequest =
+        requestsByConsumer.get(c.id) ||
+        requestsByConsumer.get(c.mobile) ||
+        (c.email ? requestsByConsumer.get(c.email.toLowerCase()) : null);
+
+      let effectiveCardStatus = c.cardStatus || 'not_applied';
+      if (c.cardApproved) {
+        effectiveCardStatus = 'approved';
+      } else if (matchedRequest) {
+        effectiveCardStatus = matchedRequest.status;
+      }
+
+      const invite = invitesByConsumer.get(c.id);
+
+      return {
+        ...cObj,
+        cardStatus: effectiveCardStatus,
+        hasApplied: effectiveCardStatus !== 'not_applied',
+        cardRequestId: matchedRequest?.id,
+        inviteSent: Boolean(invite),
+        inviteSentAt: invite ? invite.createdAt : null,
+      };
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 14. Send EMI Card Request / Invite to user
+router.post('/users/:id/send-card-invite', async (req, res) => {
+  try {
+    const consumer = await Consumer.findOne({ id: req.params.id });
+    if (!consumer) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { customMessage } = req.body;
+    const id = `notif_${Date.now().toString(36)}`;
+    const title = 'Exclusive Invitation: Enable Your AKR EMI Privilege Card';
+    const message =
+      customMessage ||
+      `Hi ${consumer.name}, you are pre-qualified for the AKR EMI Privilege Card with 0% interest on store purchases. Tap to complete your card application now!`;
+
+    const newNotif = await AppNotification.create({
+      id,
+      consumerId: consumer.id,
+      title,
+      message,
+      type: 'card_invite',
+      read: false,
+    });
+
+    await logActivity(
+      'Admin',
+      'SEND_CARD_INVITE',
+      consumer.id,
+      consumer.name,
+      consumer.cardStatus || 'not_applied',
+      'Sent EMI card enable request notification'
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: `EMI Card invitation sent to ${consumer.name}`,
+      notification: newNotif,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

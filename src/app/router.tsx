@@ -26,6 +26,7 @@ import { NotificationsScreen } from '../features/notifications/NotificationsScre
 // Admin Screens
 import { AdminLoginScreen } from '../features/admin/auth/AdminLoginScreen';
 import { DashboardScreen } from '../features/admin/dashboard/DashboardScreen';
+import { UsersScreen } from '../features/admin/users/UsersScreen';
 import { ConsumerManagementScreen } from '../features/admin/consumers/ConsumerManagementScreen';
 import { DuesManagementScreen } from '../features/admin/dues/DuesManagementScreen';
 import { PlanTypesScreen } from '../features/admin/plan-types/PlanTypesScreen';
@@ -156,6 +157,10 @@ export const router = createBrowserRouter([
       {
         path: 'dashboard',
         element: <DashboardScreen />,
+      },
+      {
+        path: 'users',
+        element: <UsersScreen />,
       },
       {
         path: 'consumers',

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { consumerApi } from '../../core/api';
-import { DuesPlan, Payment, Consumer } from '../../core/types';
+import { DuesPlan, Payment, Consumer, AppNotification } from '../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../core/formatters';
 import { AkrLogo } from '../../assets/logo';
 import {
@@ -102,13 +102,15 @@ export const HomeScreen: React.FC = () => {
   } | null>(null);
 
   const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+  const [liveNotifications, setLiveNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 
   const firstName = consumer?.name.split(' ')[0] || 'Member';
 
-  // Count unread notifications
-  const unreadCount = notifications.filter(
+  // Count unread notifications using live notifications from AWS (or store fallback)
+  const currentNotifs = liveNotifications.length > 0 ? liveNotifications : notifications;
+  const unreadCount = currentNotifs.filter(
     (n) => (n.consumerId === consumer?.id || n.consumerId === null) && !n.read
   ).length;
 
@@ -117,13 +119,15 @@ export const HomeScreen: React.FC = () => {
     async function loadHomeData() {
       try {
         setLoading(true);
-        const [duesRes, paymentsRes] = await Promise.all([
-          consumerApi.getDues(),
-          consumerApi.getPaymentHistory(),
+        const [duesRes, paymentsRes, notifsRes] = await Promise.all([
+          consumerApi.getDues().catch(() => null),
+          consumerApi.getPaymentHistory().catch(() => []),
+          consumerApi.getNotifications().catch(() => []),
         ]);
         if (isMounted) {
-          setDuesData(duesRes);
+          if (duesRes) setDuesData(duesRes);
           setRecentPayments(paymentsRes.slice(0, 3));
+          if (Array.isArray(notifsRes)) setLiveNotifications(notifsRes);
         }
       } catch (err) {
         console.error('Failed to load home data', err);
@@ -142,11 +146,15 @@ export const HomeScreen: React.FC = () => {
     const handleSync = async () => {
       try {
         await useStore.persist.rehydrate();
+        const freshNotifs = await consumerApi.getNotifications().catch(() => null);
+        if (Array.isArray(freshNotifs)) {
+          setLiveNotifications(freshNotifs);
+        }
       } catch (e) {}
     };
 
     window.addEventListener('focus', handleSync);
-    const interval = setInterval(handleSync, 2500);
+    const interval = setInterval(handleSync, 3500);
 
     return () => {
       window.removeEventListener('focus', handleSync);
