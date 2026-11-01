@@ -67,6 +67,14 @@ export const paymentGateway = {
           name: params.consumer.name,
           email: params.consumer.email || '',
           contact: params.consumer.mobile || '',
+          method:
+            params.method === 'UPI'
+              ? 'upi'
+              : params.method === 'CARD'
+              ? 'card'
+              : params.method === 'NETBANKING'
+              ? 'netbanking'
+              : undefined,
         },
         theme: {
           color: '#D4AF37', // AKR Gold
