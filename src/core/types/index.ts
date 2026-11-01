@@ -132,6 +132,9 @@ export interface Payment {
   reference: string; // UTR or receipt number
   source: PaymentSource;
   createdAt: string; // ISO timestamp
+  consumerName?: string;
+  consumerAccountNumber?: string;
+  planTitle?: string;
 }
 
 export interface CardType {

@@ -264,6 +264,9 @@ export const consumerApi = {
   getPaymentHistory: () =>
     request<Payment[]>('/consumer/payments', {}, 'consumer'),
 
+  getPaymentReceipt: (paymentId: string) =>
+    request<Payment>(`/consumer/payments/${paymentId}`, {}, 'consumer'),
+
   // Cards
   getCards: () => request<CardType[]>('/consumer/cards', {}, 'consumer'),
 

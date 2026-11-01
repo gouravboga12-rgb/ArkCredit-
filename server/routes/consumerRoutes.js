@@ -980,13 +980,44 @@ router.post('/payments/initiate', async (req, res) => {
   }
 });
 
-// 7. Payment history
+// 7. Payment history & Receipt
 router.get('/payments', async (req, res) => {
   const consumerId = getConsumerId(req);
   if (!consumerId) return res.status(401).json({ error: 'Unauthorized' });
 
   const payments = await Payment.find({ consumerId }).sort({ createdAt: -1 });
   return res.json(payments);
+});
+
+router.get('/payments/:id', async (req, res) => {
+  try {
+    const payment = await Payment.findOne({
+      $or: [
+        { id: req.params.id },
+        { transactionRef: req.params.id },
+        { reference: req.params.id },
+      ],
+    }).lean();
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment receipt not found' });
+    }
+
+    // Attach consumer & plan info for rich standalone receipt rendering
+    const [consumer, plan] = await Promise.all([
+      Consumer.findOne({ id: payment.consumerId }).lean(),
+      DuesPlan.findOne({ id: payment.planId }).lean(),
+    ]);
+
+    return res.json({
+      ...payment,
+      consumerName: consumer?.name || '',
+      consumerAccountNumber: consumer?.accountNumber || '',
+      planTitle: plan?.title || (payment.planId === 'all' ? 'All Overdue EMIs' : 'EMI Payment'),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // 8. Cards & Notifications

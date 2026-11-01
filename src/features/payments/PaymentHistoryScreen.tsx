@@ -33,6 +33,7 @@ export const PaymentHistoryScreen: React.FC = () => {
 
   // Filter payments
   const filteredPayments = payments.filter((p) => {
+    if (!p) return false;
     const pType = (p.planTypeId || '').toLowerCase();
     // Type filter
     if (typeFilter === 'emi' && !pType.includes('loan') && !pType.includes('emi') && pType.includes('card')) {
@@ -45,8 +46,11 @@ export const PaymentHistoryScreen: React.FC = () => {
     // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const matchRef = p.transactionRef.toLowerCase().includes(q) || p.reference.toLowerCase().includes(q);
-      const matchAmount = p.amount.toString().includes(q);
+      const matchRef =
+        (p.transactionRef || '').toLowerCase().includes(q) ||
+        (p.reference || '').toLowerCase().includes(q);
+      const matchAmount =
+        p.amount !== undefined && p.amount !== null ? p.amount.toString().includes(q) : false;
       if (!matchRef && !matchAmount) return false;
     }
 
