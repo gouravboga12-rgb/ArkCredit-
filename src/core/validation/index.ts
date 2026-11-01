@@ -121,10 +121,13 @@ export const adminDuesPlanFormSchema = z.object({
   interest: z.coerce.number().min(0, 'Interest cannot be negative'),
   processingFee: z.coerce.number().min(0, 'Processing fee cannot be negative'),
   emiAmount: z.coerce.number().min(0, 'EMI amount cannot be negative'),
-  nextEmiDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  nextEmiDate: z.string().min(1, 'First EMI due date is required'),
   totalEmis: z.coerce.number().int().min(1, 'Total EMIs must be at least 1'),
   remainingEmis: z.coerce.number().int().min(0, 'Remaining EMIs cannot be negative'),
-  tenureMonths: z.coerce.number().int().min(1, 'Tenure must be at least 1 month'),
+  tenureWeeks: z.coerce.number().int().min(1, 'Tenure weeks must be at least 1').optional(),
+  tenureMonths: z.coerce.number().int().min(1, 'Tenure must be at least 1 month').optional(),
+  outstandingAmount: z.coerce.number().optional(),
+  totalPaymentDue: z.coerce.number().optional(),
   linkedCardTypeId: z.string().optional(),
 });
 

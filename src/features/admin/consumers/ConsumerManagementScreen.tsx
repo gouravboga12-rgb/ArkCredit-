@@ -272,13 +272,14 @@ export const ConsumerManagementScreen: React.FC = () => {
       title: 'Personal Loan EMI',
       referenceNumber: `LN-${c.accountNumber?.slice(-4) || '101'}-${Date.now().toString().slice(-4)}`,
       principal: 15000,
-      interest: 2000,
-      processingFee: 500,
-      emiAmount: 2500,
-      nextEmiDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+      interest: 0,
+      processingFee: 0,
+      emiAmount: 1250,
+      nextEmiDate: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0],
       totalEmis: 12,
       remainingEmis: 12,
-      tenureMonths: 12,
+      tenureWeeks: 12,
+      tenureMonths: 3,
     });
     setIsAddDuesModalOpen(true);
   };
@@ -287,18 +288,20 @@ export const ConsumerManagementScreen: React.FC = () => {
     setTargetConsumerForDues(c);
     setEditingDuesPlan(plan);
     setDuesFormError(null);
+    const weeks = plan.tenureWeeks || (plan.tenureMonths ? plan.tenureMonths * 4 : plan.totalEmis || 12);
     duesForm.reset({
       planTypeId: plan.planTypeId,
       title: plan.title,
       referenceNumber: plan.referenceNumber,
       principal: plan.principal,
-      interest: plan.interest,
-      processingFee: plan.processingFee,
+      interest: plan.interest || 0,
+      processingFee: plan.processingFee || 0,
       emiAmount: plan.emiAmount,
       nextEmiDate: plan.nextEmiDate ? plan.nextEmiDate.split('T')[0] : new Date().toISOString().split('T')[0],
       totalEmis: plan.totalEmis,
       remainingEmis: plan.remainingEmis,
-      tenureMonths: plan.tenureMonths || plan.totalEmis || 12,
+      tenureWeeks: weeks,
+      tenureMonths: plan.tenureMonths || Math.ceil(weeks / 4),
     });
     setIsAddDuesModalOpen(true);
   };
@@ -306,6 +309,7 @@ export const ConsumerManagementScreen: React.FC = () => {
   const handleApplyEmiCalculation = (calc: EmiCalculationResult) => {
     duesForm.setValue('interest', calc.interestAmount);
     duesForm.setValue('emiAmount', calc.emiAmount);
+    duesForm.setValue('tenureWeeks', calc.tenureWeeks);
     duesForm.setValue('tenureMonths', calc.tenureMonths);
     duesForm.setValue('totalEmis', calc.totalEmis);
     duesForm.setValue('remainingEmis', calc.remainingEmis);
@@ -326,18 +330,44 @@ export const ConsumerManagementScreen: React.FC = () => {
     duesForm.setValue('nextEmiDate', target.toISOString().split('T')[0]);
   };
 
+  const handleDuesFormValidationError = (errors: any) => {
+    console.error('Dues form validation errors:', errors);
+    const firstErrorMessage = Object.values(errors)[0] as any;
+    setDuesFormError(
+      firstErrorMessage?.message || 'Please check the required fields in the form.'
+    );
+  };
+
   const handleCreateDuesPlan = async (data: AdminDuesPlanFormData) => {
     if (!targetConsumerForDues) return;
     try {
       setDuesFormError(null);
+      const principal = Number(data.principal) || 0;
+      const interest = Number(data.interest) || 0;
+      const processingFee = Number(data.processingFee) || 0;
+      const calculatedTotal = principal + interest + processingFee;
+      const tenureWeeks = Number(data.tenureWeeks) || Number(data.totalEmis) || (Number(data.tenureMonths) ? Number(data.tenureMonths) * 4 : 12);
+      const tenureMonths = Number(data.tenureMonths) || Math.ceil(tenureWeeks / 4);
+
+      const planPayload = {
+        ...data,
+        principal,
+        interest,
+        processingFee,
+        outstandingAmount: calculatedTotal,
+        totalPaymentDue: calculatedTotal,
+        tenureWeeks,
+        tenureMonths,
+        nextEmiDate: data.nextEmiDate ? data.nextEmiDate.split('T')[0] : new Date().toISOString().split('T')[0],
+        consumerId: targetConsumerForDues.id,
+        status: 'active' as const,
+      };
+
       if (editingDuesPlan) {
-        await adminApi.updateDuesPlan(editingDuesPlan.id, data);
+        await adminApi.updateDuesPlan(editingDuesPlan.id, planPayload);
         setSuccessToast(`EMI Plan "${data.title}" updated successfully!`);
       } else {
-        await adminApi.createDuesPlan({
-          ...data,
-          consumerId: targetConsumerForDues.id,
-        });
+        await adminApi.createDuesPlan(planPayload);
         setSuccessToast(`EMI Plan "${data.title}" created & assigned to ${targetConsumerForDues.name}!`);
       }
 
@@ -354,6 +384,7 @@ export const ConsumerManagementScreen: React.FC = () => {
       setEditingDuesPlan(null);
       setTimeout(() => setSuccessToast(null), 4000);
     } catch (err: any) {
+      console.error('Error saving dues plan:', err);
       setDuesFormError(err.message || 'Error saving EMI plan');
     }
   };
@@ -1059,7 +1090,7 @@ export const ConsumerManagementScreen: React.FC = () => {
           }
           maxWidth="lg"
         >
-          <form onSubmit={duesForm.handleSubmit(handleCreateDuesPlan)} className="space-y-4 text-left">
+          <form onSubmit={duesForm.handleSubmit(handleCreateDuesPlan, handleDuesFormValidationError)} className="space-y-4 text-left">
             {/* Consumer Context Header */}
             <div className="p-3 rounded-xl bg-zinc-900 border border-akr-gold/30 flex items-center justify-between text-xs">
               <div>
@@ -1340,11 +1371,18 @@ export const ConsumerManagementScreen: React.FC = () => {
                   label="Tenure (Weeks) *"
                   type="number"
                   placeholder="12"
-                  error={duesForm.formState.errors.tenureMonths?.message}
-                  {...duesForm.register('tenureMonths')}
+                  error={duesForm.formState.errors.tenureWeeks?.message || duesForm.formState.errors.tenureMonths?.message}
+                  {...duesForm.register('tenureWeeks')}
                 />
               </div>
             </div>
+
+            {duesFormError && (
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/60 text-xs text-red-300 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{duesFormError}</span>
+              </div>
+            )}
 
             <div className="pt-2">
               <GoldButton type="submit" isLoading={duesForm.formState.isSubmitting}>

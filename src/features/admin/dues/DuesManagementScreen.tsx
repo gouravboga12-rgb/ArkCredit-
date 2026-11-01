@@ -68,6 +68,7 @@ export const DuesManagementScreen: React.FC = () => {
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<DuesPlan | null>(null);
   const [modalConsumerId, setModalConsumerId] = useState<string>('');
+  const [planFormError, setPlanFormError] = useState<string | null>(null);
 
   // Bulk Upload State
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -153,7 +154,8 @@ export const DuesManagementScreen: React.FC = () => {
   const handleApplyEmiCalculation = (calc: EmiCalculationResult) => {
     setValue('interest', calc.interestAmount);
     setValue('emiAmount', calc.emiAmount);
-    setValue('tenureMonths', calc.tenureWeeks);
+    setValue('tenureWeeks', calc.tenureWeeks);
+    setValue('tenureMonths', calc.tenureMonths);
     setValue('totalEmis', calc.totalEmis);
     setValue('remainingEmis', calc.remainingEmis);
   };
@@ -196,41 +198,72 @@ export const DuesManagementScreen: React.FC = () => {
     loadData();
   }, []);
 
+  const handlePlanValidationError = (formErrors: any) => {
+    console.error('Plan form validation errors:', formErrors);
+    const firstMsg = Object.values(formErrors)[0] as any;
+    setPlanFormError(firstMsg?.message || 'Please fill in all required fields correctly.');
+  };
+
   const handleCreateOrUpdatePlan = async (data: AdminDuesPlanFormData) => {
     try {
+      setPlanFormError(null);
+      const principal = Number(data.principal) || 0;
+      const interest = Number(data.interest) || 0;
+      const processingFee = Number(data.processingFee) || 0;
+      const calculatedTotal = principal + interest + processingFee;
+      const tenureWeeks = Number(data.tenureWeeks) || Number(data.totalEmis) || (Number(data.tenureMonths) ? Number(data.tenureMonths) * 4 : 12);
+      const tenureMonths = Number(data.tenureMonths) || Math.ceil(tenureWeeks / 4);
+
+      const planPayload = {
+        ...data,
+        principal,
+        interest,
+        processingFee,
+        outstandingAmount: calculatedTotal,
+        totalPaymentDue: calculatedTotal,
+        tenureWeeks,
+        tenureMonths,
+        nextEmiDate: data.nextEmiDate ? data.nextEmiDate.split('T')[0] : new Date().toISOString().split('T')[0],
+        consumerId: modalConsumerId,
+        status: 'active' as const,
+      };
+
       if (editingPlan) {
-        await adminApi.updateDuesPlan(editingPlan.id, data);
+        await adminApi.updateDuesPlan(editingPlan.id, planPayload);
+        setOverdueToast(`Plan "${data.title}" updated successfully!`);
       } else {
-        await adminApi.createDuesPlan({
-          ...data,
-          consumerId: modalConsumerId,
-        });
+        await adminApi.createDuesPlan(planPayload);
+        setOverdueToast(`Plan "${data.title}" created successfully!`);
       }
       setIsPlanModalOpen(false);
       setEditingPlan(null);
       reset();
       loadData();
+      setTimeout(() => setOverdueToast(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Error saving dues plan');
+      console.error('Error saving plan:', err);
+      setPlanFormError(err.message || 'Error saving dues plan');
     }
   };
 
   const openAddPlanForConsumer = (cId: string) => {
     setEditingPlan(null);
     setModalConsumerId(cId);
+    setPlanFormError(null);
     const enabledPt = planTypes.find((p) => p.enabled);
     reset({
       planTypeId: enabledPt?.id || '',
       title: 'Personal Loan EMI',
       referenceNumber: `LN-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       principal: 15000,
-      interest: 2000,
-      processingFee: 500,
-      emiAmount: 2500,
-      nextEmiDate: '2026-11-25',
+      interest: 0,
+      processingFee: 0,
+      emiAmount: 1250,
+      nextEmiDate: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0],
       totalEmis: 12,
-      remainingEmis: 7,
-      tenureMonths: 12,
+      remainingEmis: 12,
+      tenureWeeks: 12,
+      tenureMonths: 3,
     });
     setIsPlanModalOpen(true);
   };
@@ -238,17 +271,20 @@ export const DuesManagementScreen: React.FC = () => {
   const openEditPlan = (plan: DuesPlan) => {
     setEditingPlan(plan);
     setModalConsumerId(plan.consumerId);
+    setPlanFormError(null);
+    const weeks = plan.tenureWeeks || (plan.tenureMonths ? plan.tenureMonths * 4 : plan.totalEmis || 12);
     setValue('planTypeId', plan.planTypeId);
     setValue('title', plan.title);
     setValue('referenceNumber', plan.referenceNumber);
     setValue('principal', plan.principal);
-    setValue('interest', plan.interest);
-    setValue('processingFee', plan.processingFee);
+    setValue('interest', plan.interest || 0);
+    setValue('processingFee', plan.processingFee || 0);
     setValue('emiAmount', plan.emiAmount);
-    setValue('nextEmiDate', plan.nextEmiDate);
+    setValue('nextEmiDate', plan.nextEmiDate ? plan.nextEmiDate.split('T')[0] : '');
     setValue('totalEmis', plan.totalEmis);
     setValue('remainingEmis', plan.remainingEmis);
-    setValue('tenureMonths', plan.tenureWeeks || plan.tenureMonths || plan.totalEmis || 12);
+    setValue('tenureWeeks', weeks);
+    setValue('tenureMonths', plan.tenureMonths || Math.ceil(weeks / 4));
     setValue('linkedCardTypeId', plan.linkedCardTypeId || '');
     setIsPlanModalOpen(true);
   };
@@ -910,7 +946,7 @@ export const DuesManagementScreen: React.FC = () => {
         onClose={() => setIsPlanModalOpen(false)}
         title={editingPlan ? 'Edit Dues Plan' : 'Assign New Dues Plan'}
       >
-        <form onSubmit={handleSubmit(handleCreateOrUpdatePlan)} className="space-y-3.5 text-left">
+        <form onSubmit={handleSubmit(handleCreateOrUpdatePlan, handlePlanValidationError)} className="space-y-3.5 text-left">
           {/* Plan Type Selector */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -1159,11 +1195,18 @@ export const DuesManagementScreen: React.FC = () => {
               <InputField
                 label="Tenure (Weeks) *"
                 type="number"
-                error={errors.tenureMonths?.message}
-                {...register('tenureMonths')}
+                error={errors.tenureWeeks?.message || errors.tenureMonths?.message}
+                {...register('tenureWeeks')}
               />
             </div>
           </div>
+
+          {planFormError && (
+            <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/60 text-xs text-red-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{planFormError}</span>
+            </div>
+          )}
 
           <div className="pt-3">
             <GoldButton type="submit" isLoading={isSubmitting}>

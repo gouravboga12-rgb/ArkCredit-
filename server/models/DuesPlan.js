@@ -8,8 +8,18 @@ const DuesPlanSchema = new mongoose.Schema({
   productName: { type: String, default: '' },
   referenceNumber: { type: String, default: '' },
   status: { type: String, enum: ['active', 'completed', 'defaulted'], default: 'active' },
-  outstandingAmount: { type: Number, required: true },
-  totalPaymentDue: { type: Number, required: true },
+  outstandingAmount: {
+    type: Number,
+    default: function() {
+      return (Number(this.principal) || 0) + (Number(this.interest) || 0) + (Number(this.processingFee) || 0);
+    }
+  },
+  totalPaymentDue: {
+    type: Number,
+    default: function() {
+      return (Number(this.principal) || 0) + (Number(this.interest) || 0) + (Number(this.processingFee) || 0);
+    }
+  },
   principal: { type: Number, required: true },
   interest: { type: Number, default: 0 },
   processingFee: { type: Number, default: 0 },
@@ -18,6 +28,7 @@ const DuesPlanSchema = new mongoose.Schema({
   totalEmis: { type: Number, required: true },
   remainingEmis: { type: Number, required: true },
   tenureWeeks: { type: Number, default: 12 },
+  tenureMonths: { type: Number, default: 3 },
   frequency: { type: String, enum: ['weekly', 'monthly'], default: 'weekly' },
   linkedCardTypeId: { type: String, default: 'card_emi_privilege' },
   overdueAmount: { type: Number, default: 0 },

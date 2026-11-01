@@ -35,9 +35,6 @@ const PRESET_TENURES = [
 
 const PRESET_RATES = [
   { rate: 0, label: '0% (Interest-Free)' },
-  { rate: 5, label: '5%' },
-  { rate: 10, label: '10%' },
-  { rate: 12, label: '12%' },
 ];
 
 export const EmiTenureCalculator: React.FC<EmiTenureCalculatorProps> = ({
@@ -274,39 +271,26 @@ export const EmiTenureCalculator: React.FC<EmiTenureCalculatorProps> = ({
         )}
       </div>
 
-      {/* 2. Interest Rate Selection (%) - Default 0% */}
+      {/* 2. Interest Rate Selection (%) - 0% Interest-Free Policy */}
       <div>
         <label className="flex items-center justify-between text-[11px] font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
           <span className="flex items-center gap-1">
             <Percent className="w-3 h-3 text-akr-gold" />
-            <span>Interest Rate (% - Default 0% Interest-Free) *</span>
+            <span>Interest Rate (0% Interest-Free Store Policy) *</span>
           </span>
           <span className="text-emerald-400 font-mono font-bold">
-            {interestRate === 0 ? '0% (Interest-Free)' : `${interestRate}% p.a.`}
+            0% (Interest-Free)
           </span>
         </label>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-          {PRESET_RATES.map((rItem) => {
-            const isSelected = !isCustomRate && interestRate === rItem.rate;
-            return (
-              <button
-                key={rItem.rate}
-                type="button"
-                onClick={() => handleSelectPresetRate(rItem.rate)}
-                className={`
-                  py-1.5 px-1.5 rounded-lg text-xs font-semibold text-center transition-all border
-                  ${
-                    isSelected
-                      ? 'bg-akr-gold text-black border-akr-gold shadow-md font-bold scale-[1.02]'
-                      : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                  }
-                `}
-              >
-                {rItem.label}
-              </button>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          <div className="py-1.5 px-3 rounded-lg text-xs font-bold text-center bg-akr-gold text-black border border-akr-gold shadow-md flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5" />
+            <span>0% (Interest-Free)</span>
+          </div>
+          <span className="text-[11px] text-zinc-400">
+            Zero interest charged on weekly installments.
+          </span>
         </div>
       </div>
 

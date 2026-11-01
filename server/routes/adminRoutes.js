@@ -188,7 +188,29 @@ router.get(['/plans', '/dues'], async (req, res) => {
 router.post(['/plans', '/dues'], async (req, res) => {
   try {
     const id = `plan_${Date.now().toString(36)}`;
-    const newPlan = await DuesPlan.create({ ...req.body, id });
+    const principal = Number(req.body.principal) || 0;
+    const interest = Number(req.body.interest) || 0;
+    const processingFee = Number(req.body.processingFee) || 0;
+    const calcTotal = principal + interest + processingFee;
+
+    const outstandingAmount = req.body.outstandingAmount !== undefined ? Number(req.body.outstandingAmount) : calcTotal;
+    const totalPaymentDue = req.body.totalPaymentDue !== undefined ? Number(req.body.totalPaymentDue) : calcTotal;
+
+    const tenureWeeks = Number(req.body.tenureWeeks) || (Number(req.body.tenureMonths) ? Number(req.body.tenureMonths) * 4 : 12);
+    const tenureMonths = Number(req.body.tenureMonths) || Math.ceil(tenureWeeks / 4);
+
+    const newPlan = await DuesPlan.create({
+      ...req.body,
+      id,
+      principal,
+      interest,
+      processingFee,
+      outstandingAmount,
+      totalPaymentDue,
+      tenureWeeks,
+      tenureMonths,
+      status: req.body.status || 'active',
+    });
     await logActivity('Admin', 'CREATE_DUES_PLAN', newPlan.consumerId, newPlan.title, '-', `₹${newPlan.totalPaymentDue || newPlan.principal}`);
     return res.status(201).json(newPlan);
   } catch (err) {
