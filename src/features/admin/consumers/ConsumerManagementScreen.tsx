@@ -28,10 +28,11 @@ import {
   Copy,
   Lock,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
-import { Consumer, DueStatus, DuesPlan, Payment, PlanType } from '../../../core/types';
+import { Consumer, DueStatus, DuesPlan, Payment, PlanType, PlanCategory } from '../../../core/types';
 import { formatCurrency, formatDisplayDate, maskAccount, formatDateOnlyIST } from '../../../core/formatters';
 import {
   adminConsumerFormSchema,
@@ -144,6 +145,51 @@ export const ConsumerManagementScreen: React.FC = () => {
   const duesInterest = duesForm.watch('interest') || 0;
   const duesFee = duesForm.watch('processingFee') || 0;
   const calculatedTotalOutstanding = Number(duesPrincipal) + Number(duesInterest) + Number(duesFee);
+
+  // Custom Plan Type creation inside Add Plan Form
+  const [isCreatingPlanType, setIsCreatingPlanType] = useState(false);
+  const [newPlanTypeName, setNewPlanTypeName] = useState('');
+  const [newPlanTypeCategory, setNewPlanTypeCategory] = useState<PlanCategory>('SAREE_EMI');
+  const [isSavingPlanType, setIsSavingPlanType] = useState(false);
+
+  const handleSaveCustomPlanType = async () => {
+    if (!newPlanTypeName.trim()) return;
+    try {
+      setIsSavingPlanType(true);
+      const created = await adminApi.createPlanType({
+        name: newPlanTypeName.trim(),
+        category: newPlanTypeCategory,
+        icon: 'shopping-bag',
+        enabled: true,
+      });
+
+      // Update local state list
+      setPlanTypes((prev) => {
+        const filtered = prev.filter((p) => p.id !== created.id);
+        return [...filtered, created];
+      });
+
+      // Update Zustand store so other admin screens also see it immediately
+      useStore.setState((state) => ({
+        planTypes: [...state.planTypes.filter((p) => p.id !== created.id), created],
+      }));
+
+      // Immediately select in the form
+      duesForm.setValue('planTypeId', created.id);
+      if (!duesForm.getValues('title') || duesForm.getValues('title') === 'Personal Loan EMI') {
+        duesForm.setValue('title', `${created.name} EMI`);
+      }
+
+      setIsCreatingPlanType(false);
+      setNewPlanTypeName('');
+      setSuccessToast(`Custom EMI Type "${created.name}" created and selected!`);
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to create custom EMI plan type');
+    } finally {
+      setIsSavingPlanType(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -1035,21 +1081,122 @@ export const ConsumerManagementScreen: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
-                  Plan Type *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-zinc-400 uppercase">
+                    Plan Type *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingPlanType(true)}
+                    className="text-[11px] font-bold text-akr-gold hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+ Add Custom Type</span>
+                  </button>
+                </div>
                 <select
                   {...duesForm.register('planTypeId')}
-                  className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold"
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      setIsCreatingPlanType(true);
+                    } else {
+                      duesForm.setValue('planTypeId', e.target.value);
+                    }
+                  }}
+                  className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold cursor-pointer"
                 >
+                  <option value="" disabled>Select an EMI Plan Type...</option>
                   {planTypes.map((pt) => (
                     <option key={pt.id} value={pt.id}>
                       {pt.name} ({pt.category})
                     </option>
                   ))}
+                  <option value="__custom__" className="text-akr-gold font-bold">
+                    + Type & Add Custom EMI Type...
+                  </option>
                 </select>
                 {duesForm.formState.errors.planTypeId && (
                   <p className="text-[10px] text-red-400 mt-1">{duesForm.formState.errors.planTypeId.message}</p>
+                )}
+
+                {/* Inline Custom EMI Type Creator */}
+                {isCreatingPlanType && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-[#141418] border border-akr-gold/40 space-y-2.5 shadow-xl animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-akr-gold uppercase tracking-wider flex items-center gap-1">
+                        <Plus className="w-3 h-3" /> Custom EMI Plan Type
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCreatingPlanType(false);
+                          setNewPlanTypeName('');
+                        }}
+                        className="text-zinc-500 hover:text-white text-xs cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={newPlanTypeName}
+                        onChange={(e) => setNewPlanTypeName(e.target.value)}
+                        placeholder="Enter EMI Type Name (e.g. Bridal Saree EMI, Gold Loan EMI)"
+                        className="w-full bg-[#1A1A1E] border border-zinc-700 text-white rounded-lg px-3 py-2 text-xs outline-none focus:border-akr-gold"
+                        autoFocus
+                      />
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-zinc-400 uppercase mb-0.5 font-bold">
+                            Category
+                          </label>
+                          <select
+                            value={newPlanTypeCategory}
+                            onChange={(e) => setNewPlanTypeCategory(e.target.value as PlanCategory)}
+                            className="w-full bg-[#1A1A1E] border border-zinc-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-akr-gold cursor-pointer"
+                          >
+                            <option value="SAREE_EMI">Saree EMI</option>
+                            <option value="PRODUCT_PURCHASE">Product Purchase</option>
+                            <option value="RETAIL_PURCHASE">Retail Purchase</option>
+                            <option value="CUSTOM_STORE">Custom Store</option>
+                            <option value="LOAN_EMI">Loan EMI</option>
+                            <option value="CARD_EMI">Card EMI</option>
+                            <option value="OTHER">Other</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-zinc-400 uppercase mb-0.5 font-bold">
+                            Action
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleSaveCustomPlanType}
+                              disabled={isSavingPlanType || !newPlanTypeName.trim()}
+                              className="flex-1 py-1.5 rounded-lg bg-akr-gold hover:bg-amber-400 text-black font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>{isSavingPlanType ? 'Saving...' : 'Save & Select'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCreatingPlanType(false);
+                                setNewPlanTypeName('');
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
 
