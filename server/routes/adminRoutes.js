@@ -227,6 +227,7 @@ router.post(['/plans', '/dues'], async (req, res) => {
     const tenureWeeks = Number(req.body.tenureWeeks) || (Number(req.body.tenureMonths) ? Number(req.body.tenureMonths) * 4 : 12);
     const tenureMonths = Number(req.body.tenureMonths) || Math.ceil(tenureWeeks / 4);
 
+    const firstEmiDate = req.body.firstEmiDate || req.body.nextEmiDate || new Date().toISOString().split('T')[0];
     const newPlan = await DuesPlan.create({
       ...req.body,
       id,
@@ -235,6 +236,9 @@ router.post(['/plans', '/dues'], async (req, res) => {
       processingFee,
       outstandingAmount,
       totalPaymentDue,
+      firstEmiDate,
+      startDate: req.body.startDate || new Date().toISOString().split('T')[0],
+      nextEmiDate: req.body.nextEmiDate || firstEmiDate,
       tenureWeeks,
       tenureMonths,
       status: req.body.status || 'active',

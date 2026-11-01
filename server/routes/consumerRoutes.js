@@ -803,11 +803,17 @@ router.post('/razorpay/verify-payment', async (req, res) => {
           plan.status = 'completed';
           plan.outstandingAmount = 0;
           plan.remainingEmis = 0;
-        } else if (plan.nextEmiDate) {
-          const nextDate = new Date(plan.nextEmiDate);
-          const validDate = isNaN(nextDate.getTime()) ? new Date() : nextDate;
-          validDate.setDate(validDate.getDate() + (7 * emisCovered));
-          plan.nextEmiDate = validDate.toISOString().split('T')[0];
+          plan.nextEmiDate = '';
+        } else {
+          // Fixed calendar schedule progression:
+          // The next due date is strictly for installment index: (totalEmis - remainingEmis)
+          const paidCount = Math.max(0, (plan.totalEmis || 4) - plan.remainingEmis);
+          const baseDateStr = plan.firstEmiDate || plan.startDate || (plan.createdAt ? plan.createdAt.split('T')[0] : '2026-11-02');
+          const base = new Date(baseDateStr);
+          const validBase = isNaN(base.getTime()) ? new Date('2026-11-02') : base;
+          const nextDate = new Date(validBase);
+          nextDate.setDate(validBase.getDate() + (7 * paidCount));
+          plan.nextEmiDate = nextDate.toISOString().split('T')[0];
         }
 
         plan.overdueAmount = 0;
@@ -839,11 +845,15 @@ router.post('/razorpay/verify-payment', async (req, res) => {
           p.status = 'completed';
           p.outstandingAmount = 0;
           p.remainingEmis = 0;
-        } else if (p.nextEmiDate) {
-          const nextDate = new Date(p.nextEmiDate);
-          const validDate = isNaN(nextDate.getTime()) ? new Date() : nextDate;
-          validDate.setDate(validDate.getDate() + (7 * emisCovered));
-          p.nextEmiDate = validDate.toISOString().split('T')[0];
+          p.nextEmiDate = '';
+        } else {
+          const paidCount = Math.max(0, (p.totalEmis || 4) - p.remainingEmis);
+          const baseDateStr = p.firstEmiDate || p.startDate || (p.createdAt ? p.createdAt.split('T')[0] : '2026-11-02');
+          const base = new Date(baseDateStr);
+          const validBase = isNaN(base.getTime()) ? new Date('2026-11-02') : base;
+          const nextDate = new Date(validBase);
+          nextDate.setDate(validBase.getDate() + (7 * paidCount));
+          p.nextEmiDate = nextDate.toISOString().split('T')[0];
         }
 
         p.overdueAmount = 0;
@@ -943,11 +953,15 @@ router.post('/payments/initiate', async (req, res) => {
           plan.status = 'completed';
           plan.outstandingAmount = 0;
           plan.remainingEmis = 0;
-        } else if (plan.nextEmiDate) {
-          const nextDate = new Date(plan.nextEmiDate);
-          const validDate = isNaN(nextDate.getTime()) ? new Date() : nextDate;
-          validDate.setDate(validDate.getDate() + (7 * emisCovered));
-          plan.nextEmiDate = validDate.toISOString().split('T')[0];
+          plan.nextEmiDate = '';
+        } else {
+          const paidCount = Math.max(0, (plan.totalEmis || 4) - plan.remainingEmis);
+          const baseDateStr = plan.firstEmiDate || plan.startDate || (plan.createdAt ? plan.createdAt.split('T')[0] : '2026-11-02');
+          const base = new Date(baseDateStr);
+          const validBase = isNaN(base.getTime()) ? new Date('2026-11-02') : base;
+          const nextDate = new Date(validBase);
+          nextDate.setDate(validBase.getDate() + (7 * paidCount));
+          plan.nextEmiDate = nextDate.toISOString().split('T')[0];
         }
         await plan.save();
       }

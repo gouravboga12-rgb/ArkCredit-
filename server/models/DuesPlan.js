@@ -24,6 +24,8 @@ const DuesPlanSchema = new mongoose.Schema({
   interest: { type: Number, default: 0 },
   processingFee: { type: Number, default: 0 },
   emiAmount: { type: Number, required: true },
+  firstEmiDate: { type: String },
+  startDate: { type: String },
   nextEmiDate: { type: String, required: true },
   totalEmis: { type: Number, required: true },
   remainingEmis: { type: Number, required: true },

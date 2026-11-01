@@ -25,6 +25,8 @@ import {
   TrendingUp,
   Check,
   X,
+  BookOpen,
+  Receipt,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
@@ -84,6 +86,29 @@ export const DuesManagementScreen: React.FC = () => {
   const [rowErrors, setRowErrors] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
+
+  // Plan Ledger Modal State
+  const [selectedLedgerPlan, setSelectedLedgerPlan] = useState<DuesPlan | null>(null);
+  const [ledgerPayments, setLedgerPayments] = useState<any[]>([]);
+  const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
+  const [loadingLedgerPayments, setLoadingLedgerPayments] = useState(false);
+
+  const openPlanLedger = async (plan: DuesPlan) => {
+    setSelectedLedgerPlan(plan);
+    setIsLedgerModalOpen(true);
+    try {
+      setLoadingLedgerPayments(true);
+      const allPayments = await adminApi.getPayments();
+      const planPayments = allPayments.filter(
+        (p) => p.planId === plan.id || p.consumerId === plan.consumerId
+      );
+      setLedgerPayments(planPayments);
+    } catch (err) {
+      console.error('Failed to load ledger payments', err);
+    } finally {
+      setLoadingLedgerPayments(false);
+    }
+  };
 
   const adminSession = useStore((state) => state.adminSession);
   const isSuperAdmin = adminSession?.role === 'super_admin';
@@ -752,7 +777,7 @@ export const DuesManagementScreen: React.FC = () => {
                         <th className="py-3 px-4">Breakdown (P + I + Fee)</th>
                         <th className="py-3 px-4">EMI Amount</th>
                         <th className="py-3 px-4">Next Due Date</th>
-                        <th className="py-3 px-4">EMIs Left</th>
+                        <th className="py-3 px-4">Repayment Progress</th>
                         <th className="py-3 px-4">Status</th>
                       </>
                     )}
@@ -858,8 +883,28 @@ export const DuesManagementScreen: React.FC = () => {
                                 </span>
                               )}
                             </td>
-                            <td className="py-3.5 px-4 text-zinc-300">
-                              {p.remainingEmis} / {p.totalEmis}
+                            <td className="py-3.5 px-4">
+                              {(() => {
+                                const total = p.totalEmis || 4;
+                                const remaining = p.remainingEmis !== undefined ? p.remainingEmis : 0;
+                                const paid = Math.max(0, total - remaining);
+                                const pct = Math.round((paid / total) * 100);
+                                return (
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                                        {paid} / {total} Paid
+                                      </span>
+                                      <span className="text-[10px] text-zinc-400 font-mono font-medium">
+                                        ({pct}%)
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-zinc-400 font-mono">
+                                      {remaining} {remaining === 1 ? 'EMI' : 'EMIs'} left ({formatCurrency(p.outstandingAmount)})
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="py-3.5 px-4">
                               <StatusBadge status={p.status === 'active' ? 'Active' : 'Closed'} size="sm" />
@@ -869,6 +914,16 @@ export const DuesManagementScreen: React.FC = () => {
 
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Ledger Button */}
+                            <button
+                              onClick={() => openPlanLedger(p)}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[#1E1B13] text-akr-gold hover:bg-akr-gold hover:text-black border border-akr-gold/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                              title="View Plan Repayment Ledger"
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>Ledger</span>
+                            </button>
+
                             {/* Overdue Action Button */}
                             {isOverdue && (
                               <button
@@ -950,9 +1005,12 @@ export const DuesManagementScreen: React.FC = () => {
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">EMIs Left</span>
-                      <span className="text-zinc-300 font-mono">
-                        {p.remainingEmis} / {p.totalEmis}
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">Repayment</span>
+                      <span className="text-emerald-400 font-bold block">
+                        {Math.max(0, (p.totalEmis || 4) - (p.remainingEmis || 0))} / {p.totalEmis || 4} Paid
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {p.remainingEmis} left
                       </span>
                     </div>
                   </div>
@@ -967,6 +1025,13 @@ export const DuesManagementScreen: React.FC = () => {
 
                   {/* Action Controls */}
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                    <button
+                      onClick={() => openPlanLedger(p)}
+                      className="px-3 py-1.5 rounded-lg bg-[#1E1B13] border border-akr-gold/40 text-akr-gold hover:bg-akr-gold hover:text-black text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Ledger</span>
+                    </button>
                     {calculateDaysOverdue(p.nextEmiDate) >= 1 && (
                       <button
                         onClick={() => openOverdueModal(p)}
@@ -1744,6 +1809,232 @@ export const DuesManagementScreen: React.FC = () => {
               </GoldButton>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* 4. Plan Repayment Ledger Modal */}
+      {selectedLedgerPlan && (
+        <Modal
+          isOpen={isLedgerModalOpen}
+          onClose={() => {
+            setIsLedgerModalOpen(false);
+            setSelectedLedgerPlan(null);
+          }}
+          title={`Plan Repayment Ledger — ${selectedLedgerPlan.title} (${selectedLedgerPlan.referenceNumber})`}
+          maxWidth="2xl"
+        >
+          {(() => {
+            const plan = selectedLedgerPlan;
+            const consumer = consumers.find((c) => c.id === plan.consumerId);
+            const totalEmis = plan.totalEmis || 4;
+            const remainingEmis = plan.remainingEmis !== undefined ? plan.remainingEmis : 0;
+            const paidEmis = Math.max(0, totalEmis - remainingEmis);
+            const totalPlanAmount = plan.totalPaymentDue || plan.principal;
+            const totalPaidAmount = Math.max(0, totalPlanAmount - plan.outstandingAmount);
+            const progressPct = Math.round((paidEmis / totalEmis) * 100);
+
+            const baseDateStr = plan.firstEmiDate || plan.startDate || (plan.createdAt ? plan.createdAt.split('T')[0] : '2026-11-02');
+            const base = new Date(baseDateStr);
+            const validBase = isNaN(base.getTime()) ? new Date('2026-11-02') : base;
+
+            const matchingPayments = ledgerPayments
+              .filter((pay) => pay.planId === plan.id || pay.consumerId === plan.consumerId)
+              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+            const installments = Array.from({ length: totalEmis }, (_, i) => {
+              const instNum = i + 1;
+              const isPaid = instNum <= paidEmis;
+              const instDate = new Date(validBase);
+              instDate.setDate(validBase.getDate() + (7 * i));
+              const dateStr = instDate.toISOString().split('T')[0];
+              const matchedPayment = isPaid ? matchingPayments[i] : null;
+
+              return {
+                installmentNumber: instNum,
+                dueDate: dateStr,
+                amount: plan.emiAmount,
+                isPaid,
+                isNextDue: instNum === paidEmis + 1,
+                payment: matchedPayment,
+              };
+            });
+
+            return (
+              <div className="space-y-4 text-left">
+                {/* Consumer & Plan Metadata Card */}
+                <div className="p-4 rounded-xl bg-[#141418] border border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider block">
+                      Account Holder / Customer
+                    </span>
+                    <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
+                      <span>{consumer?.name || 'Customer'}</span>
+                      <span className="text-xs font-mono text-akr-gold font-normal">
+                        ({consumer?.accountNumber || 'N/A'})
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                      Mobile: {consumer?.mobile || 'N/A'} • Reference: {plan.referenceNumber}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      0% Interest-Free Weekly EMI
+                    </span>
+                    <StatusBadge status={plan.status === 'active' ? 'Active' : 'Closed'} size="sm" />
+                  </div>
+                </div>
+
+                {/* Ledger Metrics Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 rounded-xl bg-[#18181D] border border-zinc-800">
+                    <span className="text-[10px] text-zinc-400 uppercase font-mono block">Total Financed</span>
+                    <span className="text-base font-extrabold text-white">{formatCurrency(totalPlanAmount)}</span>
+                    <span className="text-[10px] text-zinc-500 block">Principal + Fee</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#18181D] border border-emerald-900/40">
+                    <span className="text-[10px] text-emerald-400 uppercase font-mono block">Total Received</span>
+                    <span className="text-base font-extrabold text-emerald-400">{formatCurrency(totalPaidAmount)}</span>
+                    <span className="text-[10px] text-emerald-400 font-bold block">{paidEmis} of {totalEmis} EMIs Paid</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#18181D] border border-zinc-800">
+                    <span className="text-[10px] text-akr-gold uppercase font-mono block">Current Balance</span>
+                    <span className="text-base font-extrabold text-akr-gold">{formatCurrency(plan.outstandingAmount)}</span>
+                    <span className="text-[10px] text-zinc-400 block">{remainingEmis} {remainingEmis === 1 ? 'EMI' : 'EMIs'} remaining</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#18181D] border border-zinc-800">
+                    <span className="text-[10px] text-zinc-400 uppercase font-mono block">Next Scheduled Due</span>
+                    <span className="text-sm font-bold text-white block mt-0.5">
+                      {plan.nextEmiDate ? formatDisplayDate(plan.nextEmiDate) : 'Cleared'}
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-mono block">{formatCurrency(plan.emiAmount)} / week</span>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="p-3 rounded-xl bg-[#121215] border border-zinc-800/80 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-400">
+                      Repayment Completion: {paidEmis} / {totalEmis} Paid ({progressPct}%)
+                    </span>
+                    <span className="text-zinc-400 font-mono text-[11px]">
+                      {plan.outstandingAmount > 0 ? `${formatCurrency(plan.outstandingAmount)} Remaining` : 'Fully Settled'}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 via-akr-gold to-amber-400 rounded-full"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Week-by-Week Installment Schedule Table */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h5 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-akr-gold" />
+                      <span>Weekly Installment Schedule & Ledger</span>
+                    </h5>
+                    <span className="text-[10px] text-zinc-400 font-mono">
+                      {matchingPayments.length} verified payment record{matchingPayments.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden bg-black/40">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#18181D] text-zinc-400 font-mono border-b border-zinc-800 uppercase text-[10px]">
+                        <tr>
+                          <th className="py-2.5 px-3">#</th>
+                          <th className="py-2.5 px-3">Scheduled Due Date</th>
+                          <th className="py-2.5 px-3">EMI Amount</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">Payment Date</th>
+                          <th className="py-2.5 px-3">Transaction Ref / UTR</th>
+                          <th className="py-2.5 px-3 text-right">Mode</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/60 font-sans">
+                        {installments.map((inst) => (
+                          <tr
+                            key={inst.installmentNumber}
+                            className={`transition-colors ${
+                              inst.isPaid ? 'bg-emerald-950/10 hover:bg-emerald-950/20' : 'hover:bg-zinc-900/40'
+                            }`}
+                          >
+                            <td className="py-2.5 px-3 font-bold text-zinc-300">
+                              Wk {inst.installmentNumber}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-white">
+                              {formatDisplayDate(inst.dueDate)}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold font-mono text-akr-gold">
+                              {formatCurrency(inst.amount)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {inst.isPaid ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                  ✓ PAID
+                                </span>
+                              ) : inst.isNextDue ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
+                                  ● NEXT DUE
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded-full">
+                                  UPCOMING
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-zinc-300 font-mono text-[11px]">
+                              {inst.payment ? formatDisplayDate(inst.payment.createdAt, true) : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-[11px] text-zinc-300">
+                              {inst.payment ? (
+                                <span>{inst.payment.reference || inst.payment.transactionRef}</span>
+                              ) : (
+                                <span className="text-zinc-500 italic">Pending payment</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-[10px] text-zinc-300">
+                              {inst.payment ? (
+                                <span className="uppercase px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700">
+                                  {inst.payment.mode || 'UPI'}
+                                </span>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Footer Controls */}
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+                  <span className="text-[10px] text-zinc-500 italic">
+                    Audited ledger dynamically synchronized with backend MongoDB & Razorpay records.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLedgerModalOpen(false);
+                      setSelectedLedgerPlan(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs cursor-pointer"
+                  >
+                    Close Ledger
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </Modal>
       )}
     </div>

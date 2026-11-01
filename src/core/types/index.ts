@@ -103,6 +103,8 @@ export interface DuesPlan {
   interest: number; // 0 for on-time weekly EMIs
   processingFee: number;
   emiAmount: number; // Weekly EMI amount
+  firstEmiDate?: string; // Scheduled date of first installment
+  startDate?: string; // Plan start date
   nextEmiDate: string; // ISO date 'YYYY-MM-DD'
   totalEmis: number; // Total number of weekly EMIs
   remainingEmis: number; // Remaining weekly EMIs
