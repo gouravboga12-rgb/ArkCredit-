@@ -81,6 +81,7 @@ export const ConsumerManagementScreen: React.FC = () => {
   const [newCreditLimitInput, setNewCreditLimitInput] = useState<string>('');
   const [isSavingLimitUpgrade, setIsSavingLimitUpgrade] = useState(false);
   const [upgradeSuccessMsg, setUpgradeSuccessMsg] = useState<string | null>(null);
+  const [showCustomUpgradeInput, setShowCustomUpgradeInput] = useState(false);
 
   // Plan Delete Confirmation Modal State
   const [planToDelete, setPlanToDelete] = useState<{ plan: DuesPlan; consumer: any } | null>(null);
@@ -276,6 +277,7 @@ export const ConsumerManagementScreen: React.FC = () => {
     setEditingDuesPlan(null);
     setDuesFormError(null);
     setIsUpgradingLimit(false);
+    setShowCustomUpgradeInput(false);
     setUpgradeSuccessMsg(null);
     setNewCreditLimitInput(String(c.creditLimit || 50000));
     const defaultPt = planTypes.find((p) => p.enabled)?.id || 'pt_loan_emi';
@@ -301,6 +303,7 @@ export const ConsumerManagementScreen: React.FC = () => {
     setEditingDuesPlan(plan);
     setDuesFormError(null);
     setIsUpgradingLimit(false);
+    setShowCustomUpgradeInput(false);
     setUpgradeSuccessMsg(null);
     setNewCreditLimitInput(String(c.creditLimit || 50000));
     const weeks = plan.tenureWeeks || (plan.tenureMonths ? plan.tenureMonths * 4 : plan.totalEmis || 12);
@@ -1293,18 +1296,102 @@ export const ConsumerManagementScreen: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="pt-1 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNewCreditLimitInput(String(recommendedLimit));
-                            setIsUpgradingLimit(true);
-                          }}
-                          className="px-3.5 py-1.5 rounded-lg bg-akr-gold hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow"
-                        >
-                          <ArrowUpCircle className="w-4 h-4" />
-                          <span>Upgrade Credit Limit to {formatCurrency(recommendedLimit)}</span>
-                        </button>
+                      <div className="pt-2 border-t border-amber-500/30 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          {/* Option 1: Direct Required Upgrade Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleUpgradeCreditLimit(recommendedLimit)}
+                            disabled={isSavingLimitUpgrade}
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-akr-gold to-amber-400 hover:brightness-110 active:scale-95 text-black font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-gold-glow disabled:opacity-50"
+                          >
+                            <ArrowUpCircle className="w-4 h-4 stroke-[2.5]" />
+                            <span>
+                              {isSavingLimitUpgrade ? 'Upgrading...' : `Upgrade Credit Limit to ${formatCurrency(recommendedLimit)}`}
+                            </span>
+                          </button>
+
+                          {/* Option 2: Custom Manual Upgrade Button Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCustomUpgradeInput(!showCustomUpgradeInput);
+                              if (!newCreditLimitInput) {
+                                setNewCreditLimitInput(String(recommendedLimit));
+                              }
+                            }}
+                            className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              showCustomUpgradeInput
+                                ? 'bg-zinc-800 text-white border-zinc-500 shadow-inner'
+                                : 'bg-black/60 text-akr-gold border-akr-gold/50 hover:bg-zinc-900 hover:border-akr-gold'
+                            }`}
+                          >
+                            <TrendingUp className="w-4 h-4" />
+                            <span>{showCustomUpgradeInput ? 'Hide Custom Option' : 'Custom Upgrade Option...'}</span>
+                          </button>
+                        </div>
+
+                        {/* Custom Upgrade Input & Quick Chips (Option 2 Content) */}
+                        {showCustomUpgradeInput && (
+                          <div className="p-3.5 rounded-xl bg-black/80 border border-akr-gold/50 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-akr-gold uppercase tracking-wider flex items-center gap-1.5">
+                                <span>Enter Custom Credit Limit Manually</span>
+                              </span>
+                              <span className="text-[10px] text-zinc-400 font-mono">
+                                Min Required: {formatCurrency(recommendedLimit)}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <div className="relative flex-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-akr-gold font-bold text-xs">₹</span>
+                                <input
+                                  type="number"
+                                  min={recommendedLimit}
+                                  value={newCreditLimitInput}
+                                  onChange={(e) => setNewCreditLimitInput(e.target.value)}
+                                  placeholder={`e.g. ${recommendedLimit}`}
+                                  className="w-full bg-[#1A1A1E] border border-zinc-700 text-white rounded-lg pl-7 pr-3 py-2 text-xs outline-none focus:border-akr-gold font-mono font-bold"
+                                  autoFocus
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleUpgradeCreditLimit()}
+                                disabled={isSavingLimitUpgrade || !newCreditLimitInput || Number(newCreditLimitInput) <= 0}
+                                className="px-4 py-2 rounded-lg bg-akr-gold hover:bg-amber-400 text-black font-extrabold text-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow"
+                              >
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                <span>{isSavingLimitUpgrade ? 'Saving...' : 'Apply Custom Limit'}</span>
+                              </button>
+                            </div>
+
+                            {/* Quick Preset Chips */}
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                              <span className="text-[10px] text-zinc-400">Quick options:</span>
+                              {[recommendedLimit, 60000, 75000, 100000, 150000]
+                                .filter((val, idx, arr) => val >= recommendedLimit && arr.indexOf(val) === idx)
+                                .map((val) => (
+                                  <button
+                                    key={val}
+                                    type="button"
+                                    onClick={() => {
+                                      setNewCreditLimitInput(String(val));
+                                      handleUpgradeCreditLimit(val);
+                                    }}
+                                    className={`text-[10px] px-2 py-0.5 rounded font-mono transition-colors ${
+                                      val === recommendedLimit
+                                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold hover:bg-amber-500/30'
+                                        : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700'
+                                    }`}
+                                  >
+                                    {val === recommendedLimit ? `Exact (${formatCurrency(val)})` : formatCurrency(val)}
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
