@@ -214,7 +214,42 @@ export const consumerApi = {
       allPlans: DuesPlan[];
     }>('/consumer/dues', {}, 'consumer'),
 
-  // Payments
+  // Payments & Razorpay
+  createRazorpayOrder: (payload: {
+    planId: string | 'all';
+    amount: number;
+  }) =>
+    request<{
+      orderId: string;
+      amount: number;
+      currency: string;
+      keyId: string;
+      planTitle?: string;
+    }>('/consumer/razorpay/create-order', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, 'consumer'),
+
+  verifyRazorpayPayment: (payload: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+    planId: string | 'all';
+    amount: number;
+    mode?: string;
+  }) =>
+    request<{
+      success: boolean;
+      paymentId: string;
+      transactionRef: string;
+      amount: number;
+      paidAt: string;
+      message: string;
+    }>('/consumer/razorpay/verify-payment', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, 'consumer'),
+
   initiatePayment: (payload: {
     planId: string | 'all';
     amount: number;

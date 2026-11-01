@@ -8,6 +8,8 @@ const Payment = require('../models/Payment');
 const CardType = require('../models/CardType');
 const CardRequest = require('../models/CardRequest');
 const AppNotification = require('../models/AppNotification');
+const ActivityLog = require('../models/ActivityLog');
+const { createRazorpayOrder, verifyRazorpaySignature, RAZORPAY_KEY_ID } = require('../config/razorpay');
 const { generateOtp, sendOtpEmail } = require('../config/mailer');
 
 function maskEmail(email) {
@@ -682,7 +684,207 @@ router.get('/dues', async (req, res) => {
   });
 });
 
-// 6. Payment initiation
+// 6. Payment initiation (Razorpay Order Creation & Verification)
+router.post('/razorpay/create-order', async (req, res) => {
+  try {
+    const consumerId = getConsumerId(req);
+    if (!consumerId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { planId, amount } = req.body;
+    const numAmount = Number(amount);
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ error: 'Valid payment amount is required' });
+    }
+
+    const consumer = await Consumer.findOne({ id: consumerId });
+    let planTitle = 'Weekly EMI Installment';
+    if (planId && planId !== 'all') {
+      const plan = await DuesPlan.findOne({ id: planId, consumerId });
+      if (plan) planTitle = plan.title || 'Weekly EMI Installment';
+    }
+
+    const order = await createRazorpayOrder({
+      amount: numAmount,
+      currency: 'INR',
+      receipt: `rcpt_${Date.now().toString(36)}`,
+      notes: {
+        consumerId: consumerId,
+        consumerName: consumer?.name || 'Customer',
+        consumerMobile: consumer?.mobile || '-',
+        planId: planId || 'all',
+        planTitle,
+      },
+    });
+
+    return res.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: RAZORPAY_KEY_ID,
+      planTitle,
+    });
+  } catch (err) {
+    console.error('Razorpay order creation error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to create payment order' });
+  }
+});
+
+router.post('/razorpay/verify-payment', async (req, res) => {
+  try {
+    const consumerId = getConsumerId(req);
+    if (!consumerId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      planId,
+      amount,
+      mode = 'UPI',
+    } = req.body;
+
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      return res.status(400).json({ error: 'Incomplete Razorpay payment response' });
+    }
+
+    const numAmount = Number(amount);
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ error: 'Invalid payment amount' });
+    }
+
+    // 1. Verify signature
+    const isValid = verifyRazorpaySignature({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+    });
+
+    if (!isValid) {
+      return res.status(400).json({ error: 'Payment signature verification failed' });
+    }
+
+    // 2. Check duplicate idempotent processing
+    const existingPayment = await Payment.findOne({ transactionRef: razorpay_payment_id });
+    if (existingPayment) {
+      return res.json({
+        success: true,
+        paymentId: existingPayment.id,
+        transactionRef: existingPayment.transactionRef,
+        amount: existingPayment.amount,
+        paidAt: existingPayment.createdAt,
+        message: 'Payment verified and recorded',
+      });
+    }
+
+    const consumer = await Consumer.findOne({ id: consumerId });
+    let planTypeId = 'pt_loan_emi';
+    let planTitle = 'Weekly EMI';
+
+    // 3. Update Plan & Schedule
+    if (planId && planId !== 'all') {
+      const plan = await DuesPlan.findOne({ id: planId, consumerId });
+      if (plan) {
+        planTypeId = plan.planTypeId || 'pt_loan_emi';
+        planTitle = plan.title || 'Weekly EMI';
+        plan.outstandingAmount = Math.max(0, (plan.outstandingAmount || 0) - numAmount);
+        plan.remainingEmis = Math.max(0, (plan.remainingEmis || 1) - 1);
+        if (plan.outstandingAmount === 0 || plan.remainingEmis === 0) {
+          plan.status = 'completed';
+        }
+
+        // Advance next EMI due date by 7 days if still active
+        if (plan.status !== 'completed' && plan.nextEmiDate) {
+          const nextDate = new Date(plan.nextEmiDate);
+          nextDate.setDate(nextDate.getDate() + 7);
+          plan.nextEmiDate = nextDate.toISOString().split('T')[0];
+        }
+
+        plan.overdueAmount = 0;
+        plan.missedWeeks = 0;
+        plan.missedMonths = 0;
+        await plan.save();
+      }
+    } else {
+      // Pay All: Allocate across active plans
+      const activePlans = await DuesPlan.find({ consumerId, status: 'active' }).sort({ nextEmiDate: 1 });
+      let remainingToApply = numAmount;
+      for (const p of activePlans) {
+        if (remainingToApply <= 0) break;
+        const deduction = Math.min(remainingToApply, p.outstandingAmount);
+        p.outstandingAmount = Math.max(0, p.outstandingAmount - deduction);
+        p.remainingEmis = Math.max(0, (p.remainingEmis || 1) - 1);
+        if (p.outstandingAmount === 0 || p.remainingEmis === 0) {
+          p.status = 'completed';
+        }
+        if (p.status !== 'completed' && p.nextEmiDate) {
+          const nextDate = new Date(p.nextEmiDate);
+          nextDate.setDate(nextDate.getDate() + 7);
+          p.nextEmiDate = nextDate.toISOString().split('T')[0];
+        }
+        p.overdueAmount = 0;
+        p.missedWeeks = 0;
+        await p.save();
+        remainingToApply -= deduction;
+      }
+    }
+
+    // 4. Record Payment document in MongoDB
+    const paymentId = `pay_${Date.now().toString(36)}`;
+    const payment = await Payment.create({
+      id: paymentId,
+      transactionRef: razorpay_payment_id,
+      consumerId,
+      planId: planId || 'plan_all',
+      planTypeId,
+      amount: numAmount,
+      mode: mode || 'UPI',
+      status: 'success',
+      reference: `RZP/${razorpay_payment_id}`,
+      source: 'online',
+      createdAt: new Date().toISOString(),
+    });
+
+    // 5. In-app Notification for customer
+    await AppNotification.create({
+      id: `notif_${Date.now()}`,
+      consumerId,
+      title: 'Weekly EMI Payment Successful!',
+      message: `₹${numAmount.toLocaleString('en-IN')} paid via Razorpay for ${planTitle}. Ref: ${razorpay_payment_id}`,
+      type: 'payment',
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+
+    // 6. Activity Log for admin audit
+    try {
+      await ActivityLog.create({
+        id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        adminUser: consumer?.name || 'Customer Online',
+        action: 'ONLINE_EMI_PAYMENT',
+        consumerId,
+        consumerName: consumer?.name || 'Customer',
+        oldValue: `Plan: ${planTitle}`,
+        newValue: `₹${numAmount.toLocaleString('en-IN')} paid via Razorpay (${razorpay_payment_id})`,
+      });
+    } catch (e) {
+      console.warn('ActivityLog recording skipped:', e.message);
+    }
+
+    return res.json({
+      success: true,
+      paymentId: payment.id,
+      transactionRef: razorpay_payment_id,
+      amount: numAmount,
+      paidAt: payment.createdAt,
+      message: 'Weekly EMI payment verified & recorded successfully',
+    });
+  } catch (err) {
+    console.error('Razorpay verification error:', err);
+    return res.status(500).json({ error: err.message || 'Payment verification failed' });
+  }
+});
+
+// Fallback payment initiation
 router.post('/payments/initiate', async (req, res) => {
   try {
     const consumerId = getConsumerId(req);

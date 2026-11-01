@@ -31,6 +31,8 @@ playwright/.cache/
 
 # Sensitive local documents and prompts
 *.pdf
+*.csv
+*.pem
 *prompt*
 image*.png
 *.pem

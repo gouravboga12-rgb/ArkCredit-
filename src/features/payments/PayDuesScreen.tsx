@@ -140,7 +140,7 @@ export const PayDuesScreen: React.FC = () => {
 
   const allocations = isPayAll ? allocatePayAllAmount(payableAmount, plans) : [];
 
-  const handleOpenGateway = () => {
+  const handlePayNow = async () => {
     if (payableAmount <= 0) {
       alert('Payable amount must be greater than ₹0');
       return;
@@ -153,7 +153,54 @@ export const PayDuesScreen: React.FC = () => {
       );
       return;
     }
-    setIsGatewayOpen(true);
+
+    if (!consumer) {
+      alert('Please log in to make a payment.');
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      // Trigger real Razorpay standard checkout popup
+      const res = await paymentGateway.openRazorpayCheckout({
+        consumer: {
+          id: consumer.id,
+          name: consumer.name,
+          email: consumer.email,
+          mobile: consumer.mobile,
+        },
+        planId: selectedPlanId,
+        planTitle: currentPlan?.title || 'Weekly EMI Installment',
+        amount: payableAmount,
+        method: selectedMethod,
+        onDismiss: () => {
+          setIsProcessing(false);
+        },
+      });
+
+      // Trigger celebratory confetti
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#D4AF37', '#F3D98B', '#FFFFFF'],
+      });
+
+      setPaymentResult(res);
+    } catch (err: any) {
+      if (err.message && err.message.includes('Payment window closed')) {
+        // User closed popup
+        return;
+      }
+      console.error('Razorpay payment error:', err);
+      alert(err.message || 'Payment failed. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleOpenGateway = () => {
+    handlePayNow();
   };
 
   const handleExecutePaymentSimulation = async (status: 'success' | 'failure' | 'pending') => {
@@ -284,12 +331,19 @@ export const PayDuesScreen: React.FC = () => {
 
           {/* Action Buttons */}
           <div className="space-y-3 max-w-sm mx-auto">
-            {isSuccess && paymentResult.payments.length > 0 && (
+            {isSuccess && (
               <OutlineGoldButton
-                onClick={() => navigate(`/app/receipt/${paymentResult.payments[0].id}`)}
+                onClick={() => {
+                  const receiptId = paymentResult.payments[0]?.id || paymentResult.receiptNumber;
+                  if (receiptId && receiptId !== 'N/A') {
+                    navigate(`/app/receipt/${receiptId}`);
+                  } else {
+                    navigate('/app/history');
+                  }
+                }}
                 icon={<Download className="w-4 h-4" />}
               >
-                Download Receipt
+                View Payment Receipt
               </OutlineGoldButton>
             )}
 
@@ -709,13 +763,14 @@ export const PayDuesScreen: React.FC = () => {
       {/* Pay Now Button & Security Accents (Phone 3 in template) */}
       <div className="px-4 pt-2">
         <GoldButton
-          onClick={handleOpenGateway}
-          disabled={payableAmount <= 0 || isCustomBelowMandatory}
+          onClick={handlePayNow}
+          disabled={payableAmount <= 0 || isCustomBelowMandatory || isProcessing}
+          isLoading={isProcessing}
         >
           {isCustomBelowMandatory
             ? `Minimum Required: ${formatCurrency(mandatoryOverdueTotal)}`
             : payableAmount > 0
-            ? `Pay Now • ${formatCurrency(payableAmount)}`
+            ? `Pay via Razorpay • ${formatCurrency(payableAmount)}`
             : 'Enter Valid Amount'}
         </GoldButton>
 
@@ -723,11 +778,11 @@ export const PayDuesScreen: React.FC = () => {
         <div className="mt-3 flex flex-col items-center justify-center gap-1 text-[11px] text-zinc-400">
           <div className="flex items-center gap-1.5">
             <Lock className="w-3.5 h-3.5 text-akr-gold" />
-            <span>Your payment is secure and encrypted</span>
+            <span>Secured by Razorpay • 256-bit SSL Encryption</span>
           </div>
           <div className="flex items-center gap-1.5 font-semibold text-zinc-300">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>100% Safe & Trusted</span>
+            <span>100% Safe & Instant Settlement</span>
           </div>
         </div>
       </div>
