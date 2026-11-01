@@ -714,91 +714,20 @@ export const PayDuesScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Payment Method Selector (Phone 3 in template) */}
-          <div className="text-left space-y-2">
-            <label className="block text-xs font-bold text-akr-text-muted uppercase tracking-wider mb-1">
-              Select Payment Method
-            </label>
-
-            <div className="space-y-2">
-              {/* UPI */}
-              <div
-                onClick={() => setSelectedMethod('UPI')}
-                className={`
-                  flex items-center justify-between p-3.5 rounded-card border cursor-pointer transition-all
-                  ${
-                    selectedMethod === 'UPI'
-                      ? 'bg-akr-surface-card border-akr-gold ring-1 ring-akr-gold/40'
-                      : 'bg-akr-surface border-akr-border/80'
-                  }
-                `}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-orange-950/40 border border-orange-700/40 text-orange-400 flex items-center justify-center">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-white">UPI</h5>
-                    <p className="text-[10px] text-zinc-400">Pay instantly using any UPI app</p>
-                  </div>
-                </div>
-                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedMethod === 'UPI' ? 'border-akr-gold bg-akr-gold' : 'border-zinc-600'}`}>
-                  {selectedMethod === 'UPI' && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
-                </div>
+          {/* Razorpay All-in-One Payment Suite Info */}
+          <div className="p-3.5 rounded-xl bg-[#141418] border border-zinc-800 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-akr-gold/15 border border-akr-gold/30 flex items-center justify-center text-akr-gold flex-shrink-0">
+                <Smartphone className="w-4 h-4" />
               </div>
-
-              {/* Debit / Credit Card */}
-              <div
-                onClick={() => setSelectedMethod('CARD')}
-                className={`
-                  flex items-center justify-between p-3.5 rounded-card border cursor-pointer transition-all
-                  ${
-                    selectedMethod === 'CARD'
-                      ? 'bg-akr-surface-card border-akr-gold ring-1 ring-akr-gold/40'
-                      : 'bg-akr-surface border-akr-border/80'
-                  }
-                `}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-blue-950/40 border border-blue-700/40 text-blue-400 flex items-center justify-center">
-                    <CreditCard className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-white">Debit / Credit Card</h5>
-                    <p className="text-[10px] text-zinc-400">Visa, Mastercard, RuPay</p>
-                  </div>
-                </div>
-                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedMethod === 'CARD' ? 'border-akr-gold bg-akr-gold' : 'border-zinc-600'}`}>
-                  {selectedMethod === 'CARD' && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
-                </div>
-              </div>
-
-              {/* Net Banking */}
-              <div
-                onClick={() => setSelectedMethod('NETBANKING')}
-                className={`
-                  flex items-center justify-between p-3.5 rounded-card border cursor-pointer transition-all
-                  ${
-                    selectedMethod === 'NETBANKING'
-                      ? 'bg-akr-surface-card border-akr-gold ring-1 ring-akr-gold/40'
-                      : 'bg-akr-surface border-akr-border/80'
-                  }
-                `}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-950/40 border border-purple-700/40 text-purple-400 flex items-center justify-center">
-                    <Landmark className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-white">Net Banking</h5>
-                    <p className="text-[10px] text-zinc-400">All major Indian banks supported</p>
-                  </div>
-                </div>
-                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedMethod === 'NETBANKING' ? 'border-akr-gold bg-akr-gold' : 'border-zinc-600'}`}>
-                  {selectedMethod === 'NETBANKING' && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
-                </div>
+              <div className="text-left">
+                <span className="font-bold text-white block">UPI, Cards, Net Banking & Wallets</span>
+                <span className="text-[10px] text-zinc-400">Google Pay, PhonePe, Paytm, Visa, Mastercard, SBI, HDFC</span>
               </div>
             </div>
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded-full font-bold uppercase whitespace-nowrap ml-2">
+              Instant
+            </span>
           </div>
         </div>
       </div>
