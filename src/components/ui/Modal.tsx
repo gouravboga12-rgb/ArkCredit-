@@ -41,17 +41,22 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+      {/* Backdrop overlay click dismiss */}
+      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
       <div
         className={`
-          w-full ${maxWidthClasses[maxWidth]} bg-akr-surface border border-akr-border/80 rounded-card
-          shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp
+          relative z-10 w-full ${maxWidthClasses[maxWidth]} bg-akr-surface border-t sm:border border-akr-border/80 rounded-t-3xl sm:rounded-card
+          shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] animate-slideUp sm:animate-scaleUp
         `}
         role="dialog"
         aria-modal="true"
       >
+        {/* Mobile Grab Indicator Pill */}
+        <div className="w-12 h-1 bg-zinc-700/80 rounded-full mx-auto mt-2.5 sm:hidden" />
+
         {title && (
-          <div className="px-5 py-4 border-b border-akr-border/60 flex items-center justify-between">
+          <div className="px-5 py-3.5 sm:py-4 border-b border-akr-border/60 flex items-center justify-between">
             <h3 className="text-base font-bold text-white tracking-wide font-sans">{title}</h3>
             <button
               onClick={onClose}
@@ -62,7 +67,7 @@ export const Modal: React.FC<ModalProps> = ({
             </button>
           </div>
         )}
-        <div className="p-5 overflow-y-auto flex-1">{children}</div>
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 overscroll-contain">{children}</div>
       </div>
     </div>
   );
@@ -86,12 +91,12 @@ export const BottomSheet: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/85 backdrop-blur-sm animate-fadeIn">
       <div className="fixed inset-0" onClick={onClose} />
       <div
         className="
           relative z-10 w-full max-w-lg bg-akr-surface border-t border-akr-border/80 rounded-t-3xl
-          p-5 shadow-2xl flex flex-col max-h-[85vh] animate-slideUp
+          p-5 shadow-2xl flex flex-col max-h-[88vh] animate-slideUp
         "
         role="dialog"
       >

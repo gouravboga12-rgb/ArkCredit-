@@ -210,7 +210,7 @@ export const CardApplicationModal: React.FC<CardApplicationModalProps> = ({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="rahul@example.com"
+                placeholder="user@example.com"
                 className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-xs outline-none focus:border-akr-gold"
               />
             </div>
@@ -345,8 +345,8 @@ export const CardApplicationModal: React.FC<CardApplicationModalProps> = ({
           </span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="pt-2 flex items-center justify-end gap-2.5">
+        {/* Sticky Action Buttons */}
+        <div className="sticky bottom-0 bg-[#141417]/95 backdrop-blur-md pt-3 pb-3 sm:pb-2 -mx-4 sm:-mx-5 px-4 sm:px-5 border-t border-zinc-800 flex items-center justify-end gap-2.5 mt-4">
           <button
             type="button"
             onClick={onClose}
@@ -354,7 +354,7 @@ export const CardApplicationModal: React.FC<CardApplicationModalProps> = ({
           >
             Cancel
           </button>
-          <GoldButton type="submit" isLoading={submitting}>
+          <GoldButton type="submit" isLoading={submitting} className="flex-1 sm:flex-none">
             Submit Card Application
           </GoldButton>
         </div>
