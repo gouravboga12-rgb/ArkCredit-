@@ -39,6 +39,7 @@ export const CardsScreen: React.FC = () => {
   const navigate = useNavigate();
   const [cards, setCards] = useState<CardType[]>([]);
   const [myCardRequests, setMyCardRequests] = useState<CardRequest[]>([]);
+  const [duesData, setDuesData] = useState<{ totalOutstanding: number; plans: DuesPlan[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
   const [submittedRequest, setSubmittedRequest] = useState<CardRequest | null>(null);
@@ -64,11 +65,13 @@ export const CardsScreen: React.FC = () => {
     const handleSync = async () => {
       try {
         await useStore.persist.rehydrate();
-        const [myReqs, profile] = await Promise.all([
+        const [myReqs, profile, dues] = await Promise.all([
           consumerApi.getMyCardRequests().catch(() => null),
           consumerApi.getProfile().catch(() => null),
+          consumerApi.getDues().catch(() => null),
         ]);
         if (Array.isArray(myReqs)) setMyCardRequests(myReqs);
+        if (dues) setDuesData(dues);
         if (profile) {
           useStore.getState().updateConsumerProfile(profile.id, profile);
         }
@@ -96,13 +99,15 @@ export const CardsScreen: React.FC = () => {
     async function fetchCardsData() {
       try {
         setLoading(true);
-        const [data, myReqs, profile] = await Promise.all([
+        const [data, myReqs, profile, dues] = await Promise.all([
           consumerApi.getCards().catch(() => []),
           consumerApi.getMyCardRequests().catch(() => []),
           consumerApi.getProfile().catch(() => null),
+          consumerApi.getDues().catch(() => null),
         ]);
         if (data) setCards(data);
         if (Array.isArray(myReqs)) setMyCardRequests(myReqs);
+        if (dues) setDuesData(dues);
         if (profile) {
           useStore.getState().updateConsumerProfile(profile.id, profile);
           if (consumerSession) {
@@ -202,9 +207,12 @@ export const CardsScreen: React.FC = () => {
 
   // Active dues plans linked to consumer
   const activePlans = useMemo(() => {
+    if (duesData?.plans && Array.isArray(duesData.plans)) {
+      return duesData.plans.filter((p) => p.status === 'active');
+    }
     if (!consumer) return [];
     return duesPlans.filter((p) => p.consumerId === consumer.id && p.status === 'active');
-  }, [duesPlans, consumer]);
+  }, [duesData, duesPlans, consumer]);
 
   // Financial Calculations
   const approvedLimit = approvedCardRequest?.creditLimitApproved || userCardRequest?.creditLimitApproved;
@@ -213,7 +221,9 @@ export const CardsScreen: React.FC = () => {
       ? consumer.creditLimit
       : (approvedLimit && approvedLimit > 0 ? approvedLimit : 30000);
 
-  const usedAmount = activePlans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0);
+  const usedAmount = duesData?.totalOutstanding !== undefined
+    ? duesData.totalOutstanding
+    : activePlans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0);
   const availableBalance = Math.max(0, totalCreditLimit - usedAmount);
   const utilizationRate = totalCreditLimit > 0 ? Math.min(100, Math.round((usedAmount / totalCreditLimit) * 100)) : 0;
 
