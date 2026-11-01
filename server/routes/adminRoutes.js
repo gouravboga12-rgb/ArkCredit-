@@ -189,6 +189,34 @@ router.post(['/plans', '/dues'], async (req, res) => {
   try {
     const id = `plan_${Date.now().toString(36)}`;
     const principal = Number(req.body.principal) || 0;
+    const consumerId = req.body.consumerId;
+
+    if (!consumerId) {
+      return res.status(400).json({ error: 'Customer (consumerId) is required to assign an EMI plan.' });
+    }
+
+    // 1. Credit Limit Verification
+    const consumer = await Consumer.findOne({ id: consumerId });
+    if (!consumer) {
+      return res.status(404).json({ error: 'Customer not found.' });
+    }
+
+    const creditLimit = Number(consumer.creditLimit) || 0;
+    const activePlans = await DuesPlan.find({ consumerId, status: 'active' });
+    const currentOutstanding = activePlans.reduce((sum, p) => sum + (Number(p.outstandingAmount) || 0), 0);
+    const availableCredit = Math.max(0, creditLimit - currentOutstanding);
+
+    if (principal > availableCredit) {
+      return res.status(400).json({
+        error: `Credit limit exceeded! Customer's approved credit limit is ₹${creditLimit.toLocaleString('en-IN')}, active dues are ₹${currentOutstanding.toLocaleString('en-IN')}, and available balance is only ₹${availableCredit.toLocaleString('en-IN')}. Requested principal of ₹${principal.toLocaleString('en-IN')} exceeds available limit by ₹${(principal - availableCredit).toLocaleString('en-IN')}. Please upgrade customer credit limit before assigning this plan.`,
+        creditLimit,
+        currentOutstanding,
+        availableCredit,
+        shortfall: principal - availableCredit,
+        requiredLimit: currentOutstanding + principal,
+      });
+    }
+
     const interest = Number(req.body.interest) || 0;
     const processingFee = Number(req.body.processingFee) || 0;
     const calcTotal = principal + interest + processingFee;
@@ -220,6 +248,34 @@ router.post(['/plans', '/dues'], async (req, res) => {
 
 router.put(['/plans/:id', '/dues/:id'], async (req, res) => {
   try {
+    const existingPlan = await DuesPlan.findOne({ id: req.params.id });
+    if (!existingPlan) {
+      return res.status(404).json({ error: 'Plan not found' });
+    }
+
+    if (req.body.principal !== undefined) {
+      const newPrincipal = Number(req.body.principal) || 0;
+      const consumer = await Consumer.findOne({ id: existingPlan.consumerId });
+      if (consumer) {
+        const creditLimit = Number(consumer.creditLimit) || 0;
+        const otherPlans = await DuesPlan.find({
+          consumerId: existingPlan.consumerId,
+          id: { $ne: existingPlan.id },
+          status: 'active',
+        });
+        const otherOutstanding = otherPlans.reduce((sum, p) => sum + (Number(p.outstandingAmount) || 0), 0);
+        const availableCredit = Math.max(0, creditLimit - otherOutstanding);
+        if (newPrincipal > availableCredit) {
+          return res.status(400).json({
+            error: `Credit limit exceeded! Customer's approved credit limit is ₹${creditLimit.toLocaleString('en-IN')}, other active dues are ₹${otherOutstanding.toLocaleString('en-IN')}, available balance is ₹${availableCredit.toLocaleString('en-IN')}. New principal of ₹${newPrincipal.toLocaleString('en-IN')} exceeds limit.`,
+            creditLimit,
+            otherOutstanding,
+            availableCredit,
+          });
+        }
+      }
+    }
+
     const updated = await DuesPlan.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true });
     return res.json(updated);
   } catch (err) {
@@ -347,20 +403,36 @@ router.post('/payments/offline', async (req, res) => {
     if (planId) {
       const plan = await DuesPlan.findOne({ id: planId });
       if (plan) {
-        const newOutstanding = Math.max(0, (plan.outstandingAmount || 0) - Number(amount));
-        const newRemainingEmis = Math.max(0, (plan.remainingEmis || 1) - 1);
-        const newStatus = newOutstanding === 0 ? 'completed' : 'active';
-        await DuesPlan.updateOne(
-          { id: planId },
-          {
-            $set: {
-              outstandingAmount: newOutstanding,
-              remainingEmis: newRemainingEmis,
-              status: newStatus,
-              overdueAmount: 0,
-            },
-          }
-        );
+        const payAmt = Number(amount);
+        const emiAmt = plan.emiAmount > 0 ? plan.emiAmount : payAmt;
+        const newOutstanding = Math.max(0, (plan.outstandingAmount || 0) - payAmt);
+        
+        let emisCovered = 0;
+        if (newOutstanding === 0) {
+          emisCovered = plan.remainingEmis || 1;
+        } else {
+          emisCovered = Math.max(1, Math.min(plan.remainingEmis || 1, Math.round(payAmt / emiAmt)));
+        }
+
+        const newRemainingEmis = Math.max(0, (plan.remainingEmis || 1) - emisCovered);
+        const newStatus = newOutstanding === 0 || newRemainingEmis === 0 ? 'completed' : 'active';
+        
+        const updateFields = {
+          outstandingAmount: newOutstanding,
+          remainingEmis: newRemainingEmis,
+          status: newStatus,
+          overdueAmount: 0,
+          missedWeeks: 0,
+        };
+
+        if (newStatus !== 'completed' && plan.nextEmiDate) {
+          const nextDate = new Date(plan.nextEmiDate);
+          const validDate = isNaN(nextDate.getTime()) ? new Date() : nextDate;
+          validDate.setDate(validDate.getDate() + (7 * emisCovered));
+          updateFields.nextEmiDate = validDate.toISOString().split('T')[0];
+        }
+
+        await DuesPlan.updateOne({ id: planId }, { $set: updateFields });
       }
     }
 

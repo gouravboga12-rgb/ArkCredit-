@@ -786,17 +786,28 @@ router.post('/razorpay/verify-payment', async (req, res) => {
       if (plan) {
         planTypeId = plan.planTypeId || 'pt_loan_emi';
         planTitle = plan.title || 'Weekly EMI';
-        plan.outstandingAmount = Math.max(0, (plan.outstandingAmount || 0) - numAmount);
-        plan.remainingEmis = Math.max(0, (plan.remainingEmis || 1) - 1);
-        if (plan.outstandingAmount === 0 || plan.remainingEmis === 0) {
-          plan.status = 'completed';
+        const emiAmt = plan.emiAmount > 0 ? plan.emiAmount : numAmount;
+        const newOutstanding = Math.max(0, (plan.outstandingAmount || 0) - numAmount);
+
+        let emisCovered = 0;
+        if (newOutstanding === 0) {
+          emisCovered = plan.remainingEmis || 1;
+        } else {
+          emisCovered = Math.max(1, Math.min(plan.remainingEmis || 1, Math.round(numAmount / emiAmt)));
         }
 
-        // Advance next EMI due date by 7 days if still active
-        if (plan.status !== 'completed' && plan.nextEmiDate) {
+        plan.outstandingAmount = newOutstanding;
+        plan.remainingEmis = Math.max(0, (plan.remainingEmis || 1) - emisCovered);
+
+        if (plan.outstandingAmount === 0 || plan.remainingEmis === 0) {
+          plan.status = 'completed';
+          plan.outstandingAmount = 0;
+          plan.remainingEmis = 0;
+        } else if (plan.nextEmiDate) {
           const nextDate = new Date(plan.nextEmiDate);
-          nextDate.setDate(nextDate.getDate() + 7);
-          plan.nextEmiDate = nextDate.toISOString().split('T')[0];
+          const validDate = isNaN(nextDate.getTime()) ? new Date() : nextDate;
+          validDate.setDate(validDate.getDate() + (7 * emisCovered));
+          plan.nextEmiDate = validDate.toISOString().split('T')[0];
         }
 
         plan.overdueAmount = 0;
@@ -811,18 +822,33 @@ router.post('/razorpay/verify-payment', async (req, res) => {
       for (const p of activePlans) {
         if (remainingToApply <= 0) break;
         const deduction = Math.min(remainingToApply, p.outstandingAmount);
-        p.outstandingAmount = Math.max(0, p.outstandingAmount - deduction);
-        p.remainingEmis = Math.max(0, (p.remainingEmis || 1) - 1);
+        const emiAmt = p.emiAmount > 0 ? p.emiAmount : deduction;
+        const newOutstanding = Math.max(0, p.outstandingAmount - deduction);
+
+        let emisCovered = 0;
+        if (newOutstanding === 0) {
+          emisCovered = p.remainingEmis || 1;
+        } else {
+          emisCovered = Math.max(1, Math.min(p.remainingEmis || 1, Math.round(deduction / emiAmt)));
+        }
+
+        p.outstandingAmount = newOutstanding;
+        p.remainingEmis = Math.max(0, (p.remainingEmis || 1) - emisCovered);
+
         if (p.outstandingAmount === 0 || p.remainingEmis === 0) {
           p.status = 'completed';
-        }
-        if (p.status !== 'completed' && p.nextEmiDate) {
+          p.outstandingAmount = 0;
+          p.remainingEmis = 0;
+        } else if (p.nextEmiDate) {
           const nextDate = new Date(p.nextEmiDate);
-          nextDate.setDate(nextDate.getDate() + 7);
-          p.nextEmiDate = nextDate.toISOString().split('T')[0];
+          const validDate = isNaN(nextDate.getTime()) ? new Date() : nextDate;
+          validDate.setDate(validDate.getDate() + (7 * emisCovered));
+          p.nextEmiDate = validDate.toISOString().split('T')[0];
         }
+
         p.overdueAmount = 0;
         p.missedWeeks = 0;
+        p.missedMonths = 0;
         await p.save();
         remainingToApply -= deduction;
       }
@@ -902,10 +928,26 @@ router.post('/payments/initiate', async (req, res) => {
       const plan = await DuesPlan.findOne({ id: planId, consumerId });
       if (plan) {
         planTypeId = plan.planTypeId || 'pt_loan_emi';
-        plan.outstandingAmount = Math.max(0, plan.outstandingAmount - amount);
-        plan.remainingEmis = Math.max(0, plan.remainingEmis - 1);
-        if (plan.outstandingAmount === 0) {
+        const numAmt = Number(amount);
+        const emiAmt = plan.emiAmount > 0 ? plan.emiAmount : numAmt;
+        const newOutstanding = Math.max(0, plan.outstandingAmount - numAmt);
+        let emisCovered = 0;
+        if (newOutstanding === 0) {
+          emisCovered = plan.remainingEmis || 1;
+        } else {
+          emisCovered = Math.max(1, Math.min(plan.remainingEmis || 1, Math.round(numAmt / emiAmt)));
+        }
+        plan.outstandingAmount = newOutstanding;
+        plan.remainingEmis = Math.max(0, (plan.remainingEmis || 1) - emisCovered);
+        if (plan.outstandingAmount === 0 || plan.remainingEmis === 0) {
           plan.status = 'completed';
+          plan.outstandingAmount = 0;
+          plan.remainingEmis = 0;
+        } else if (plan.nextEmiDate) {
+          const nextDate = new Date(plan.nextEmiDate);
+          const validDate = isNaN(nextDate.getTime()) ? new Date() : nextDate;
+          validDate.setDate(validDate.getDate() + (7 * emisCovered));
+          plan.nextEmiDate = validDate.toISOString().split('T')[0];
         }
         await plan.save();
       }

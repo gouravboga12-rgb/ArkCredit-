@@ -29,6 +29,9 @@ import {
   Lock,
   RefreshCw,
   X,
+  ArrowUpCircle,
+  AlertTriangle,
+  TrendingUp,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
@@ -72,6 +75,12 @@ export const ConsumerManagementScreen: React.FC = () => {
   const [targetConsumerForDues, setTargetConsumerForDues] = useState<any | null>(null);
   const [editingDuesPlan, setEditingDuesPlan] = useState<DuesPlan | null>(null);
   const [duesFormError, setDuesFormError] = useState<string | null>(null);
+
+  // Credit Limit Upgrade States inside Add/Edit Dues Modal
+  const [isUpgradingLimit, setIsUpgradingLimit] = useState(false);
+  const [newCreditLimitInput, setNewCreditLimitInput] = useState<string>('');
+  const [isSavingLimitUpgrade, setIsSavingLimitUpgrade] = useState(false);
+  const [upgradeSuccessMsg, setUpgradeSuccessMsg] = useState<string | null>(null);
 
   // Plan Delete Confirmation Modal State
   const [planToDelete, setPlanToDelete] = useState<{ plan: DuesPlan; consumer: any } | null>(null);
@@ -266,6 +275,9 @@ export const ConsumerManagementScreen: React.FC = () => {
     setTargetConsumerForDues(c);
     setEditingDuesPlan(null);
     setDuesFormError(null);
+    setIsUpgradingLimit(false);
+    setUpgradeSuccessMsg(null);
+    setNewCreditLimitInput(String(c.creditLimit || 50000));
     const defaultPt = planTypes.find((p) => p.enabled)?.id || 'pt_loan_emi';
     duesForm.reset({
       planTypeId: defaultPt,
@@ -288,6 +300,9 @@ export const ConsumerManagementScreen: React.FC = () => {
     setTargetConsumerForDues(c);
     setEditingDuesPlan(plan);
     setDuesFormError(null);
+    setIsUpgradingLimit(false);
+    setUpgradeSuccessMsg(null);
+    setNewCreditLimitInput(String(c.creditLimit || 50000));
     const weeks = plan.tenureWeeks || (plan.tenureMonths ? plan.tenureMonths * 4 : plan.totalEmis || 12);
     duesForm.reset({
       planTypeId: plan.planTypeId,
@@ -304,6 +319,31 @@ export const ConsumerManagementScreen: React.FC = () => {
       tenureMonths: plan.tenureMonths || Math.ceil(weeks / 4),
     });
     setIsAddDuesModalOpen(true);
+  };
+
+  const handleUpgradeCreditLimit = async (suggestedAmount?: number) => {
+    if (!targetConsumerForDues) return;
+    const targetLimit = suggestedAmount !== undefined ? suggestedAmount : Number(newCreditLimitInput);
+    if (!targetLimit || isNaN(targetLimit) || targetLimit <= 0) {
+      alert('Please enter a valid credit limit greater than ₹0');
+      return;
+    }
+    try {
+      setIsSavingLimitUpgrade(true);
+      await adminApi.updateConsumer(targetConsumerForDues.id, { creditLimit: targetLimit });
+      setTargetConsumerForDues((prev: any) => ({ ...prev, creditLimit: targetLimit }));
+      setConsumers((prev) =>
+        prev.map((c) => (c.id === targetConsumerForDues.id ? { ...c, creditLimit: targetLimit } : c))
+      );
+      setUpgradeSuccessMsg(`Credit limit successfully upgraded to ₹${targetLimit.toLocaleString('en-IN')}!`);
+      setIsUpgradingLimit(false);
+      setDuesFormError(null);
+      setTimeout(() => setUpgradeSuccessMsg(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to upgrade credit limit');
+    } finally {
+      setIsSavingLimitUpgrade(false);
+    }
   };
 
   const handleApplyEmiCalculation = (calc: EmiCalculationResult) => {
@@ -343,6 +383,22 @@ export const ConsumerManagementScreen: React.FC = () => {
     try {
       setDuesFormError(null);
       const principal = Number(data.principal) || 0;
+
+      // Real-time credit limit enforcement
+      const consumerLimit = Number(targetConsumerForDues.creditLimit) || 0;
+      const currentOutstanding = Number(targetConsumerForDues.totalOutstanding) || 0;
+      const adjustedOutstanding = editingDuesPlan
+        ? Math.max(0, currentOutstanding - (Number(editingDuesPlan.outstandingAmount) || 0))
+        : currentOutstanding;
+      const availableBalance = Math.max(0, consumerLimit - adjustedOutstanding);
+
+      if (principal > availableBalance) {
+        setDuesFormError(
+          `Credit limit exceeded! Customer's available credit balance is ${formatCurrency(availableBalance)}, but requested principal is ${formatCurrency(principal)}. Please upgrade credit limit before proceeding.`
+        );
+        return;
+      }
+
       const interest = Number(data.interest) || 0;
       const processingFee = Number(data.processingFee) || 0;
       const calculatedTotal = principal + interest + processingFee;
@@ -1091,17 +1147,170 @@ export const ConsumerManagementScreen: React.FC = () => {
           maxWidth="lg"
         >
           <form onSubmit={duesForm.handleSubmit(handleCreateDuesPlan, handleDuesFormValidationError)} className="space-y-4 text-left">
-            {/* Consumer Context Header */}
-            <div className="p-3 rounded-xl bg-zinc-900 border border-akr-gold/30 flex items-center justify-between text-xs">
-              <div>
-                <span className="text-[10px] text-zinc-400 uppercase block">Account Holder</span>
-                <span className="font-bold text-white">{targetConsumerForDues.name}</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-zinc-400 uppercase block">Account Number</span>
-                <span className="font-mono font-bold text-akr-gold">{targetConsumerForDues.accountNumber}</span>
-              </div>
-            </div>
+            {/* Consumer Context & Credit Limit Management Dashboard */}
+            {(() => {
+              const consumerCreditLimit = Number(targetConsumerForDues.creditLimit) || 0;
+              const consumerOutstanding = Number(targetConsumerForDues.totalOutstanding) || 0;
+              const adjustedOutstanding = editingDuesPlan
+                ? Math.max(0, consumerOutstanding - (Number(editingDuesPlan.outstandingAmount) || 0))
+                : consumerOutstanding;
+              const availableCredit = Math.max(0, consumerCreditLimit - adjustedOutstanding);
+              const principalNum = Number(duesPrincipal) || 0;
+              const isLimitExceeded = principalNum > availableCredit;
+              const shortfall = Math.max(0, principalNum - availableCredit);
+              const recommendedLimit = adjustedOutstanding + principalNum;
+
+              return (
+                <div className="space-y-3">
+                  {/* Account Header with Limit Metrics */}
+                  <div className="p-3.5 rounded-xl bg-gradient-to-b from-[#18181C] to-[#121215] border border-zinc-800 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-[10px] text-zinc-400 uppercase block font-medium">Customer</span>
+                        <span className="font-bold text-white text-sm">{targetConsumerForDues.name}</span>
+                        <span className="text-[11px] text-zinc-500 font-mono block">{targetConsumerForDues.accountNumber}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewCreditLimitInput(String(consumerCreditLimit || 50000));
+                            setIsUpgradingLimit(!isUpgradingLimit);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-akr-gold/15 hover:bg-akr-gold/25 border border-akr-gold/40 text-akr-gold text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <TrendingUp className="w-3.5 h-3.5" />
+                          <span>{isUpgradingLimit ? 'Close Upgrade' : 'Upgrade Limit'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 3 Metric Pills: Total Limit | Active Dues | Available Balance */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800 text-center">
+                      <div className="p-2 rounded-lg bg-black/40 border border-zinc-800">
+                        <span className="text-[9px] uppercase tracking-wider text-zinc-400 block font-medium">Total Credit Limit</span>
+                        <span className="text-xs font-bold text-white font-mono">{formatCurrency(consumerCreditLimit)}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-black/40 border border-zinc-800">
+                        <span className="text-[9px] uppercase tracking-wider text-zinc-400 block font-medium">Active Dues</span>
+                        <span className="text-xs font-bold text-amber-400 font-mono">{formatCurrency(adjustedOutstanding)}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-black/40 border border-zinc-800">
+                        <span className="text-[9px] uppercase tracking-wider text-zinc-400 block font-medium">Available Balance</span>
+                        <span className={`text-xs font-bold font-mono ${availableCredit >= principalNum && availableCredit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {formatCurrency(availableCredit)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Inline Upgrade Limit Drawer */}
+                    {isUpgradingLimit && (
+                      <div className="mt-3 p-3 rounded-xl bg-[#141418] border border-akr-gold/40 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-akr-gold flex items-center gap-1.5 uppercase tracking-wider">
+                            <ArrowUpCircle className="w-4 h-4" /> Upgrade Customer Credit Limit
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsUpgradingLimit(false)}
+                            className="text-zinc-500 hover:text-white text-xs cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                          Increasing the credit limit instantly expands the available EMI balance for {targetConsumerForDues.name}, allowing higher purchase amounts.
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-akr-gold font-bold text-xs">₹</span>
+                            <input
+                              type="number"
+                              value={newCreditLimitInput}
+                              onChange={(e) => setNewCreditLimitInput(e.target.value)}
+                              placeholder="e.g. 60000"
+                              className="w-full bg-[#1A1A1E] border border-zinc-700 text-white rounded-lg pl-7 pr-3 py-2 text-xs outline-none focus:border-akr-gold font-mono"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleUpgradeCreditLimit()}
+                            disabled={isSavingLimitUpgrade || !newCreditLimitInput}
+                            className="px-4 py-2 rounded-lg bg-akr-gold hover:bg-amber-400 text-black font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{isSavingLimitUpgrade ? 'Saving...' : 'Apply Upgrade'}</span>
+                          </button>
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                          <span className="text-[10px] text-zinc-500">Quick Limits:</span>
+                          {[50000, 75000, 100000, recommendedLimit]
+                            .filter((val, idx, arr) => val > consumerCreditLimit && arr.indexOf(val) === idx)
+                            .map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => {
+                                  setNewCreditLimitInput(String(preset));
+                                  handleUpgradeCreditLimit(preset);
+                                }}
+                                className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2 py-0.5 rounded border border-zinc-700 transition-colors"
+                              >
+                                {preset === recommendedLimit ? `Min Required (${formatCurrency(preset)})` : formatCurrency(preset)}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Limit Upgrade Success Feedback */}
+                  {upgradeSuccessMsg && (
+                    <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-xs text-emerald-300 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>{upgradeSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  {/* Credit Limit Exceeded Warning */}
+                  {isLimitExceeded && (
+                    <div className="p-3.5 rounded-xl bg-amber-950/70 border-2 border-amber-500/70 text-amber-200 text-xs space-y-2.5 shadow-lg">
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-bold text-white text-sm">Credit Limit Exceeded!</p>
+                          <p className="text-amber-200/95 leading-relaxed">
+                            This customer has an available balance of <strong>{formatCurrency(availableCredit)}</strong> (approved limit {formatCurrency(consumerCreditLimit)} minus active dues {formatCurrency(adjustedOutstanding)}).
+                            The requested EMI principal of <strong>{formatCurrency(principalNum)}</strong> exceeds this limit by <strong className="text-red-400">{formatCurrency(shortfall)}</strong>.
+                          </p>
+                          <p className="text-zinc-400 text-[11px]">
+                            AKR Store financing policy does not allow assigning this plan until the customer has sufficient available balance or their credit limit is upgraded.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-1 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewCreditLimitInput(String(recommendedLimit));
+                            setIsUpgradingLimit(true);
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-akr-gold hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow"
+                        >
+                          <ArrowUpCircle className="w-4 h-4" />
+                          <span>Upgrade Credit Limit to {formatCurrency(recommendedLimit)}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {duesFormError && (
               <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/60 text-xs text-red-300 flex items-start gap-2">
@@ -1384,11 +1593,32 @@ export const ConsumerManagementScreen: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-2">
-              <GoldButton type="submit" isLoading={duesForm.formState.isSubmitting}>
-                {editingDuesPlan ? 'Save & Update EMI Plan' : 'Assign & Activate EMI Plan'}
-              </GoldButton>
-            </div>
+            {(() => {
+              const consumerCreditLimit = Number(targetConsumerForDues.creditLimit) || 0;
+              const consumerOutstanding = Number(targetConsumerForDues.totalOutstanding) || 0;
+              const adjustedOutstanding = editingDuesPlan
+                ? Math.max(0, consumerOutstanding - (Number(editingDuesPlan.outstandingAmount) || 0))
+                : consumerOutstanding;
+              const availableCredit = Math.max(0, consumerCreditLimit - adjustedOutstanding);
+              const principalNum = Number(duesPrincipal) || 0;
+              const isLimitExceeded = principalNum > availableCredit;
+
+              return (
+                <div className="pt-2">
+                  <GoldButton
+                    type="submit"
+                    disabled={isLimitExceeded || duesForm.formState.isSubmitting}
+                    isLoading={duesForm.formState.isSubmitting}
+                  >
+                    {isLimitExceeded
+                      ? `Cannot Assign — Exceeds Credit Limit (${formatCurrency(availableCredit)} Available)`
+                      : editingDuesPlan
+                      ? 'Save & Update EMI Plan'
+                      : 'Assign & Activate EMI Plan'}
+                  </GoldButton>
+                </div>
+              );
+            })()}
           </form>
         </Modal>
       )}

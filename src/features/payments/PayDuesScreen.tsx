@@ -44,6 +44,7 @@ export const PayDuesScreen: React.FC = () => {
   const [plans, setPlans] = useState<DuesPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('all');
   const [paymentOption, setPaymentOption] = useState<'emi' | 'full' | 'custom'>('emi');
+  const [selectedWeeks, setSelectedWeeks] = useState<number>(1);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<PaymentMode>('UPI');
   const [isGatewayOpen, setIsGatewayOpen] = useState(false);
@@ -124,9 +125,10 @@ export const PayDuesScreen: React.FC = () => {
   const payableAmount = (() => {
     if (paymentOption === 'emi') {
       if (hasOverdue) {
-        return Math.min(mandatoryOverdueTotal, totalOutstanding);
+        return Math.min(mandatoryOverdueTotal + (selectedWeeks - 1) * nextEmiAmount, totalOutstanding);
       }
-      return nextEmiAmount > 0 ? nextEmiAmount : totalOutstanding;
+      const weeksAmount = (nextEmiAmount > 0 ? nextEmiAmount : totalOutstanding) * selectedWeeks;
+      return Math.min(weeksAmount, totalOutstanding);
     }
     if (paymentOption === 'full') {
       return totalOutstanding;
@@ -544,10 +546,10 @@ export const PayDuesScreen: React.FC = () => {
 
             <div className="space-y-2">
               {(nextEmiAmount > 0 || hasOverdue) && (
-                <label
+                <div
                   onClick={() => setPaymentOption('emi')}
                   className={`
-                    flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all
+                    flex flex-col p-3 rounded-xl border cursor-pointer transition-all
                     ${
                       paymentOption === 'emi'
                         ? 'bg-akr-gold/10 border-akr-gold text-white'
@@ -555,31 +557,72 @@ export const PayDuesScreen: React.FC = () => {
                     }
                   `}
                 >
-                  <div className="flex items-center gap-2.5 text-xs font-semibold">
-                    <input
-                      type="radio"
-                      name="amount_opt"
-                      checked={paymentOption === 'emi'}
-                      onChange={() => setPaymentOption('emi')}
-                      className="accent-akr-gold"
-                    />
-                    <div>
-                      <span>
-                        {hasOverdue
-                          ? `Pay Overdue Weekly EMI (${totalMissedWeeks} wk) + Late Fee`
-                          : 'Pay Next Weekly EMI'}
-                      </span>
-                      {hasOverdue && (
-                        <span className="block text-[10px] text-red-400 font-mono">
-                          Mandatory Overdue Settlement
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 text-xs font-semibold">
+                      <input
+                        type="radio"
+                        name="amount_opt"
+                        checked={paymentOption === 'emi'}
+                        onChange={() => setPaymentOption('emi')}
+                        className="accent-akr-gold"
+                      />
+                      <div>
+                        <span>
+                          {hasOverdue
+                            ? `Pay Overdue Weekly EMI (${totalMissedWeeks} wk) + Late Fee`
+                            : selectedWeeks > 1
+                            ? `Pay ${selectedWeeks} Weeks EMIs`
+                            : 'Pay Next Weekly EMI'}
                         </span>
-                      )}
+                        {hasOverdue && (
+                          <span className="block text-[10px] text-red-400 font-mono">
+                            Mandatory Overdue Settlement
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    <span className="text-sm font-bold text-akr-gold">
+                      {formatCurrency(
+                        hasOverdue
+                          ? mandatoryOverdueTotal + (selectedWeeks - 1) * nextEmiAmount
+                          : nextEmiAmount * selectedWeeks
+                      )}
+                    </span>
                   </div>
-                  <span className="text-sm font-bold text-akr-gold">
-                    {formatCurrency(hasOverdue ? mandatoryOverdueTotal : nextEmiAmount)}
-                  </span>
-                </label>
+
+                  {/* Multi-Week Quick Selector */}
+                  {paymentOption === 'emi' && currentPlan && (currentPlan.remainingEmis || 1) > 1 && (
+                    <div className="mt-2.5 pt-2 border-t border-zinc-700/60 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                        <span>Select Weeks to Pay:</span>
+                        <span className="text-akr-gold font-bold">
+                          {selectedWeeks} {selectedWeeks === 1 ? 'Week' : 'Weeks'} ({formatCurrency(nextEmiAmount * selectedWeeks)})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {[1, 2, 3, 4]
+                          .filter((w) => w <= (currentPlan?.remainingEmis || 1))
+                          .map((w) => (
+                            <button
+                              key={w}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedWeeks(w);
+                              }}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                selectedWeeks === w
+                                  ? 'bg-akr-gold text-black shadow'
+                                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700'
+                              }`}
+                            >
+                              {w} {w === 1 ? 'Week' : 'Weeks'}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               <label

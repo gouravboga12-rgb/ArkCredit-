@@ -46,6 +46,10 @@ export interface Consumer {
   creditLimit?: number; // Credit limit assigned by admin e.g. 50000
   cardStatus?: 'not_applied' | 'pending' | 'approved' | 'rejected';
   cardNumber?: string; // Formatted masked card number e.g. '5123 •••• •••• 8842'
+  totalOutstanding?: number; // Computed active dues
+  activePlansCount?: number;
+  nextEmiAmount?: number;
+  nextEmiDate?: string;
   notificationPreferences?: {
     pushEnabled: boolean;
     smsEnabled: boolean;
