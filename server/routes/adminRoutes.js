@@ -110,8 +110,13 @@ router.get('/consumers', async (req, res) => {
         else dueStatus = 'on_time';
       }
 
+      const creditLimit = c.creditLimit !== undefined && c.creditLimit !== null ? Number(c.creditLimit) : (c.cardApproved ? 50000 : 0);
+      const availableCredit = Math.max(0, creditLimit - totalOutstanding);
+
       return {
         ...c.toObject(),
+        creditLimit,
+        availableCredit,
         activePlansCount: consumerPlans.length,
         totalOutstanding,
         nextEmiAmount,
@@ -145,8 +150,27 @@ router.post('/consumers', async (req, res) => {
 
 router.put('/consumers/:id', async (req, res) => {
   try {
-    const updated = await Consumer.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true });
-    await logActivity('Admin', 'UPDATE_CONSUMER', req.params.id, updated?.name, 'Previous details', 'Updated details');
+    const updatePayload = { ...req.body };
+    if (updatePayload.creditLimit !== undefined) {
+      updatePayload.creditLimit = Number(updatePayload.creditLimit);
+    }
+
+    const previousConsumer = await Consumer.findOne({ id: req.params.id });
+    const updated = await Consumer.findOneAndUpdate({ id: req.params.id }, { $set: updatePayload }, { new: true });
+
+    // Synchronize CardRequest documents so approved card limits stay 100% matched
+    if (updatePayload.creditLimit !== undefined && updated) {
+      await CardRequest.updateMany(
+        { $or: [{ consumerId: updated.id }, { phone: updated.mobile }, { email: updated.email }] },
+        { $set: { creditLimitApproved: updatePayload.creditLimit } }
+      );
+    }
+
+    const logDetails = updatePayload.creditLimit !== undefined
+      ? `Credit limit: ₹${previousConsumer?.creditLimit || 0} -> ₹${updatePayload.creditLimit}`
+      : 'Updated details';
+
+    await logActivity('Admin', 'UPDATE_CONSUMER', req.params.id, updated?.name, `Limit: ₹${previousConsumer?.creditLimit || 0}`, logDetails);
     return res.json(updated);
   } catch (err) {
     return res.status(500).json({ error: err.message });

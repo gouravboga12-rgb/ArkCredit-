@@ -83,6 +83,11 @@ export const ConsumerManagementScreen: React.FC = () => {
   const [upgradeSuccessMsg, setUpgradeSuccessMsg] = useState<string | null>(null);
   const [showCustomUpgradeInput, setShowCustomUpgradeInput] = useState(false);
 
+  // Standalone Quick Credit Limit Modal for direct table upgrades
+  const [quickLimitConsumer, setQuickLimitConsumer] = useState<any | null>(null);
+  const [quickLimitInput, setQuickLimitInput] = useState<string>('');
+  const [isSavingQuickLimit, setIsSavingQuickLimit] = useState(false);
+
   // Plan Delete Confirmation Modal State
   const [planToDelete, setPlanToDelete] = useState<{ plan: DuesPlan; consumer: any } | null>(null);
   const [isDeletingPlan, setIsDeletingPlan] = useState(false);
@@ -225,6 +230,7 @@ export const ConsumerManagementScreen: React.FC = () => {
     try {
       setFormError(null);
       if (editingConsumer) {
+        const creditLimitVal = data.creditLimit !== undefined && data.creditLimit !== null ? Number(data.creditLimit) : (editingConsumer.creditLimit || 50000);
         await adminApi.updateConsumer(editingConsumer.id, {
           name: data.name,
           mobile: data.mobile,
@@ -233,10 +239,26 @@ export const ConsumerManagementScreen: React.FC = () => {
           accountNumber: data.accountNumber,
           status: data.status,
           passwordHash: data.password || editingConsumer.passwordHash || 'Demo@123',
+          creditLimit: creditLimitVal,
         });
-        setSuccessToast(`Consumer ${data.name} updated successfully! (ID: ${data.accountNumber})`);
+
+        // Broadcast to Zustand store & session
+        useStore.getState().updateConsumerProfile(editingConsumer.id, { creditLimit: creditLimitVal });
+        useStore.setState((state) => ({
+          consumers: state.consumers.map((c) =>
+            c.id === editingConsumer.id ? { ...c, creditLimit: creditLimitVal } : c
+          ),
+          cardRequests: state.cardRequests.map((r) =>
+            r.consumerId === editingConsumer.id || r.phone === editingConsumer.mobile
+              ? { ...r, creditLimitApproved: creditLimitVal }
+              : r
+          ),
+        }));
+
+        setSuccessToast(`Consumer ${data.name} updated successfully! (ID: ${data.accountNumber}, Limit: ₹${creditLimitVal.toLocaleString('en-IN')})`);
       } else {
         const passwordToUse = data.password?.trim() || 'Demo@123';
+        const creditLimitVal = data.creditLimit !== undefined && data.creditLimit !== null ? Number(data.creditLimit) : 50000;
         const created = await adminApi.createConsumer({
           name: data.name,
           mobile: data.mobile,
@@ -245,8 +267,12 @@ export const ConsumerManagementScreen: React.FC = () => {
           accountNumber: data.accountNumber,
           status: data.status,
           passwordHash: passwordToUse,
+          creditLimit: creditLimitVal,
+          cardApproved: true,
+          cardStatus: 'approved',
         });
-        setSuccessToast(`Consumer ${data.name} registered! ID: ${data.accountNumber}, Password: ${passwordToUse}`);
+        useStore.getState().addConsumer(created);
+        setSuccessToast(`Consumer ${data.name} registered! ID: ${data.accountNumber}, Limit: ₹${creditLimitVal.toLocaleString('en-IN')}`);
       }
       setIsAddModalOpen(false);
       setEditingConsumer(null);
@@ -267,6 +293,7 @@ export const ConsumerManagementScreen: React.FC = () => {
     setValue('accountNumber', c.accountNumber);
     setValue('status', c.status);
     setValue('password', c.passwordHash || 'Demo@123');
+    setValue('creditLimit', c.creditLimit || 50000);
     setShowModalPassword(false);
     setIsAddModalOpen(true);
   };
@@ -334,10 +361,41 @@ export const ConsumerManagementScreen: React.FC = () => {
     try {
       setIsSavingLimitUpgrade(true);
       await adminApi.updateConsumer(targetConsumerForDues.id, { creditLimit: targetLimit });
+
+      // Update local state
       setTargetConsumerForDues((prev: any) => ({ ...prev, creditLimit: targetLimit }));
       setConsumers((prev) =>
         prev.map((c) => (c.id === targetConsumerForDues.id ? { ...c, creditLimit: targetLimit } : c))
       );
+
+      // Synchronize Zustand store immediately across all admin pages
+      useStore.getState().updateConsumerProfile(targetConsumerForDues.id, { creditLimit: targetLimit });
+      useStore.setState((state) => ({
+        consumers: state.consumers.map((c) =>
+          c.id === targetConsumerForDues.id ? { ...c, creditLimit: targetLimit } : c
+        ),
+        cardRequests: state.cardRequests.map((r) =>
+          r.consumerId === targetConsumerForDues.id || r.phone === targetConsumerForDues.mobile
+            ? { ...r, creditLimitApproved: targetLimit }
+            : r
+        ),
+      }));
+
+      // Synchronize consumer session if active
+      const cSession = useStore.getState().consumerSession;
+      if (cSession && (cSession.consumer.id === targetConsumerForDues.id || cSession.consumer.mobile === targetConsumerForDues.mobile)) {
+        const updatedSession = {
+          ...cSession,
+          consumer: { ...cSession.consumer, creditLimit: targetLimit },
+        };
+        useStore.setState({ consumerSession: updatedSession });
+        try {
+          localStorage.setItem('akr_consumer_session', JSON.stringify(updatedSession));
+        } catch (e) {}
+      }
+
+      window.dispatchEvent(new CustomEvent('akr_limit_updated', { detail: { consumerId: targetConsumerForDues.id, creditLimit: targetLimit } }));
+
       setUpgradeSuccessMsg(`Credit limit successfully upgraded to ₹${targetLimit.toLocaleString('en-IN')}!`);
       setIsUpgradingLimit(false);
       setDuesFormError(null);
@@ -346,6 +404,62 @@ export const ConsumerManagementScreen: React.FC = () => {
       alert(err.message || 'Failed to upgrade credit limit');
     } finally {
       setIsSavingLimitUpgrade(false);
+    }
+  };
+
+  const openQuickLimitModal = (consumer: any) => {
+    setQuickLimitConsumer(consumer);
+    setQuickLimitInput(String(consumer.creditLimit || 50000));
+  };
+
+  const handleSaveQuickLimit = async () => {
+    if (!quickLimitConsumer) return;
+    const targetLimit = Number(quickLimitInput);
+    if (!targetLimit || isNaN(targetLimit) || targetLimit <= 0) {
+      alert('Please enter a valid credit limit greater than ₹0');
+      return;
+    }
+    try {
+      setIsSavingQuickLimit(true);
+      await adminApi.updateConsumer(quickLimitConsumer.id, { creditLimit: targetLimit });
+
+      setConsumers((prev) =>
+        prev.map((c) => (c.id === quickLimitConsumer.id ? { ...c, creditLimit: targetLimit } : c))
+      );
+
+      useStore.getState().updateConsumerProfile(quickLimitConsumer.id, { creditLimit: targetLimit });
+      useStore.setState((state) => ({
+        consumers: state.consumers.map((c) =>
+          c.id === quickLimitConsumer.id ? { ...c, creditLimit: targetLimit } : c
+        ),
+        cardRequests: state.cardRequests.map((r) =>
+          r.consumerId === quickLimitConsumer.id || r.phone === quickLimitConsumer.mobile
+            ? { ...r, creditLimitApproved: targetLimit }
+            : r
+        ),
+      }));
+
+      const cSession = useStore.getState().consumerSession;
+      if (cSession && (cSession.consumer.id === quickLimitConsumer.id || cSession.consumer.mobile === quickLimitConsumer.mobile)) {
+        const updatedSession = {
+          ...cSession,
+          consumer: { ...cSession.consumer, creditLimit: targetLimit },
+        };
+        useStore.setState({ consumerSession: updatedSession });
+        try {
+          localStorage.setItem('akr_consumer_session', JSON.stringify(updatedSession));
+        } catch (e) {}
+      }
+
+      window.dispatchEvent(new CustomEvent('akr_limit_updated', { detail: { consumerId: quickLimitConsumer.id, creditLimit: targetLimit } }));
+
+      setSuccessToast(`Credit limit for ${quickLimitConsumer.name} upgraded to ₹${targetLimit.toLocaleString('en-IN')}!`);
+      setQuickLimitConsumer(null);
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update credit limit');
+    } finally {
+      setIsSavingQuickLimit(false);
     }
   };
 
@@ -749,8 +863,10 @@ export const ConsumerManagementScreen: React.FC = () => {
                   <th className="py-3 px-4">Customer ID</th>
                   <th className="py-3 px-4">Mobile & Email</th>
                   <th className="py-3 px-4">Password</th>
-                  <th className="py-3 px-4">Active Plans & EMIs</th>
-                  <th className="py-3 px-4">Total Outstanding</th>
+                  <th className="py-3 px-4">Approved Limit</th>
+                  <th className="py-3 px-4">Active Dues</th>
+                  <th className="py-3 px-4">Available to Borrow</th>
+                  <th className="py-3 px-4">Active Plans</th>
                   <th className="py-3 px-4">Next EMI</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -835,6 +951,62 @@ export const ConsumerManagementScreen: React.FC = () => {
                         )}
                       </div>
                     </td>
+
+                    {/* Approved Limit */}
+                    <td className="py-3.5 px-4 font-mono text-zinc-200">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white text-xs">{formatCurrency(c.creditLimit || 50000)}</span>
+                        <button
+                          type="button"
+                          onClick={() => openQuickLimitModal(c)}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-akr-gold/15 text-akr-gold hover:bg-akr-gold/30 border border-akr-gold/30 transition-all cursor-pointer"
+                          title="Upgrade / Adjust Credit Limit"
+                        >
+                          Upgrade
+                        </button>
+                      </div>
+                    </td>
+
+                    {/* Active Dues */}
+                    <td className="py-3.5 px-4 font-bold text-akr-gold font-sans">
+                      {formatCurrency(c.totalOutstanding)}
+                    </td>
+
+                    {/* Available to Borrow */}
+                    <td className="py-3.5 px-4 font-sans">
+                      {(() => {
+                        const limit = Number(c.creditLimit) || 50000;
+                        const dues = Number(c.totalOutstanding) || 0;
+                        const available = Math.max(0, limit - dues);
+                        const availPct = limit > 0 ? Math.round((available / limit) * 100) : 0;
+                        return (
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`font-extrabold text-xs ${available > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {formatCurrency(available)}
+                              </span>
+                              {available > 0 ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  {availPct}% left
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
+                                  Full
+                                </span>
+                              )}
+                            </div>
+                            <div className="w-24 h-1.5 bg-zinc-800 rounded-full mt-1.5 overflow-hidden">
+                              <div
+                                className={`h-full ${available > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
+                                style={{ width: `${availPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+
+                    {/* Active Plans */}
                     <td className="py-3.5 px-4 text-zinc-300">
                       <div className="flex items-center gap-2">
                         <button
@@ -848,7 +1020,7 @@ export const ConsumerManagementScreen: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => openAddDues(c)}
-                          className="px-2 py-0.5 rounded bg-akr-gold/15 text-akr-gold hover:bg-akr-gold/30 border border-akr-gold/40 text-[10px] font-bold flex items-center gap-1 transition-all"
+                          className="px-2 py-0.5 rounded bg-akr-gold/15 text-akr-gold hover:bg-akr-gold/30 border border-akr-gold/40 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
                           title="Add an EMI or Loan plan to this consumer"
                         >
                           <Plus className="w-3 h-3" />
@@ -856,9 +1028,8 @@ export const ConsumerManagementScreen: React.FC = () => {
                         </button>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 font-bold text-akr-gold">
-                      {formatCurrency(c.totalOutstanding)}
-                    </td>
+
+                    {/* Next EMI */}
                     <td className="py-3.5 px-4 text-zinc-300">
                       <div className="font-semibold text-white">
                         {c.nextEmiAmount > 0 ? formatCurrency(c.nextEmiAmount) : '-'}
@@ -874,28 +1045,28 @@ export const ConsumerManagementScreen: React.FC = () => {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => openAddDues(c)}
-                          className="p-1.5 rounded-lg text-akr-gold hover:text-white hover:bg-akr-gold/20 transition-colors"
+                          className="p-1.5 rounded-lg text-akr-gold hover:text-white hover:bg-akr-gold/20 transition-colors cursor-pointer"
                           title="Add EMI / Loan Plan"
                         >
                           <PlusCircle className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => openView(c)}
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
                           title="View Full Profile & Credentials"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => openEdit(c)}
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-akr-gold hover:bg-zinc-800 transition-colors"
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-akr-gold hover:bg-zinc-800 transition-colors cursor-pointer"
                           title="Edit Consumer & Password"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setConsumerToDelete(c)}
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer"
                           title="Delete Consumer"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -975,10 +1146,53 @@ export const ConsumerManagementScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-zinc-800">
+                {/* Financial Summary Card for Mobile */}
+                {(() => {
+                  const limit = Number(c.creditLimit) || 50000;
+                  const dues = Number(c.totalOutstanding) || 0;
+                  const available = Math.max(0, limit - dues);
+                  const availPct = limit > 0 ? Math.round((available / limit) * 100) : 0;
+                  return (
+                    <div className="p-2.5 rounded-xl bg-[#18181D] border border-zinc-800/80 space-y-2">
+                      <div className="grid grid-cols-3 gap-2 text-xs items-center">
+                        <div>
+                          <span className="text-[9px] text-zinc-400 uppercase font-semibold block">Limit</span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-white text-xs">{formatCurrency(limit)}</span>
+                            <button
+                              type="button"
+                              onClick={() => openQuickLimitModal(c)}
+                              className="text-[9px] text-akr-gold hover:underline font-bold"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                        <div className="border-x border-zinc-800 px-1 text-center">
+                          <span className="text-[9px] text-zinc-400 uppercase font-semibold block">Active Dues</span>
+                          <span className="font-bold text-akr-gold text-xs">{formatCurrency(dues)}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[9px] text-emerald-400 uppercase font-semibold block">Can Borrow</span>
+                          <span className="font-extrabold text-emerald-400 text-xs">{formatCurrency(available)}</span>
+                        </div>
+                      </div>
+                      <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${available > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
+                          style={{ width: `${availPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-zinc-800">
                   <div>
-                    <span className="text-[10px] text-zinc-500 uppercase block">Outstanding</span>
-                    <span className="font-bold text-akr-gold">{formatCurrency(c.totalOutstanding)}</span>
+                    <span className="text-[10px] text-zinc-500 uppercase block">Plans</span>
+                    <span className="font-semibold text-zinc-300">
+                      {c.activePlansCount} active {c.activePlansCount === 1 ? 'plan' : 'plans'}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-zinc-500 uppercase block">Next EMI</span>
@@ -1112,6 +1326,37 @@ export const ConsumerManagementScreen: React.FC = () => {
             error={errors.address?.message}
             {...register('address')}
           />
+
+          {/* Approved Credit Limit */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-zinc-400 uppercase">
+                Approved Credit Limit (₹) *
+              </label>
+              <span className="text-[10px] text-zinc-500 font-mono">Max borrowing balance</span>
+            </div>
+            <input
+              type="number"
+              placeholder="e.g. 50000"
+              className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-akr-gold font-mono font-bold"
+              {...register('creditLimit')}
+            />
+            {errors.creditLimit && (
+              <p className="text-[11px] text-red-400 mt-1">{errors.creditLimit.message}</p>
+            )}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[30000, 50000, 75000, 100000, 150000].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setValue('creditLimit', amt)}
+                  className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 border border-zinc-700 transition-colors"
+                >
+                  ₹{amt.toLocaleString('en-IN')}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div>
             <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
@@ -1922,27 +2167,64 @@ export const ConsumerManagementScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* Consumer Quick Stats Header */}
-            <div className="p-4 rounded-xl bg-akr-bg border border-zinc-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div>
-                <span className="text-[10px] uppercase text-zinc-500 block">Account</span>
-                <span className="font-mono font-bold text-white">{viewingConsumer.accountNumber}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-zinc-500 block">Total Dues</span>
-                <span className="font-bold text-akr-gold">
-                  {formatCurrency(viewingConsumer.totalOutstanding)}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-zinc-500 block">Mobile</span>
-                <span className="text-zinc-300 font-mono">{viewingConsumer.mobile}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-zinc-500 block">Status</span>
-                <StatusBadge status={viewingConsumer.status === 'inactive' ? 'Inactive' : viewingConsumer.dueStatus} size="sm" />
-              </div>
-            </div>
+            {/* Consumer Quick Stats & Borrowing Capacity Header */}
+            {(() => {
+              const limit = Number(viewingConsumer.creditLimit) || 50000;
+              const dues = Number(viewingConsumer.totalOutstanding) || 0;
+              const available = Math.max(0, limit - dues);
+              const availPct = limit > 0 ? Math.round((available / limit) * 100) : 0;
+              return (
+                <div className="p-4 rounded-xl bg-akr-bg border border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-akr-gold" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">Credit & Borrowing Capacity</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = viewingConsumer;
+                        openQuickLimitModal(c);
+                      }}
+                      className="px-2.5 py-1 rounded bg-akr-gold/15 hover:bg-akr-gold/30 border border-akr-gold/40 text-akr-gold text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Upgrade Limit</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase text-zinc-500 block">Approved Limit</span>
+                      <span className="font-mono font-bold text-white text-sm">{formatCurrency(limit)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-zinc-500 block">Active Dues</span>
+                      <span className="font-bold text-akr-gold text-sm">{formatCurrency(dues)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-emerald-400 font-bold block">Can Borrow</span>
+                      <span className="font-mono font-extrabold text-emerald-400 text-sm">{formatCurrency(available)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-zinc-500 block">Status</span>
+                      <StatusBadge status={viewingConsumer.status === 'inactive' ? 'Inactive' : viewingConsumer.dueStatus} size="sm" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 pt-1">
+                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden flex">
+                      <div className="h-full bg-amber-400" style={{ width: `${100 - availPct}%` }} />
+                      <div className="h-full bg-emerald-500" style={{ width: `${availPct}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                      <span>{100 - availPct}% credit utilized</span>
+                      <span className="text-emerald-400 font-semibold">{availPct}% available to borrow</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Dues Plans with Direct Add, Edit and Delete Buttons */}
             <div>
@@ -2055,6 +2337,107 @@ export const ConsumerManagementScreen: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {/* Quick Credit Limit Upgrade Modal */}
+      <Modal
+        isOpen={!!quickLimitConsumer}
+        onClose={() => setQuickLimitConsumer(null)}
+        title={quickLimitConsumer ? `Upgrade Credit Limit for ${quickLimitConsumer.name}` : 'Upgrade Credit Limit'}
+      >
+        {quickLimitConsumer && (
+          <div className="space-y-4 text-left">
+            <div className="p-3.5 rounded-xl bg-[#18181D] border border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Current Credit Limit:</span>
+                <span className="font-bold text-white font-mono">{formatCurrency(quickLimitConsumer.creditLimit || 50000)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Active Outstanding Dues:</span>
+                <span className="font-bold text-akr-gold font-mono">{formatCurrency(quickLimitConsumer.totalOutstanding || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800">
+                <span className="text-emerald-400 font-semibold">Current Available to Borrow:</span>
+                <span className="font-extrabold text-emerald-400 font-mono">
+                  {formatCurrency(Math.max(0, (quickLimitConsumer.creditLimit || 50000) - (quickLimitConsumer.totalOutstanding || 0)))}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-zinc-400 uppercase">
+                New Approved Credit Limit (₹) *
+              </label>
+              <input
+                type="number"
+                value={quickLimitInput}
+                onChange={(e) => setQuickLimitInput(e.target.value)}
+                placeholder="Enter new credit limit in ₹"
+                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-akr-gold font-mono font-bold"
+              />
+
+              {/* Quick Preset Buttons */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[50000, 75000, 100000, 150000, 200000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setQuickLimitInput(String(amt))}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                      Number(quickLimitInput) === amt
+                        ? 'bg-akr-gold text-black border border-akr-gold'
+                        : 'bg-zinc-800/90 text-zinc-300 hover:text-white hover:bg-zinc-700 border border-zinc-700'
+                    }`}
+                  >
+                    ₹{amt.toLocaleString('en-IN')}
+                  </button>
+                ))}
+                {[10000, 25000, 50000].map((inc) => (
+                  <button
+                    key={`+${inc}`}
+                    type="button"
+                    onClick={() => {
+                      const base = Number(quickLimitInput) || quickLimitConsumer.creditLimit || 50000;
+                      setQuickLimitInput(String(base + inc));
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-akr-gold/15 text-akr-gold hover:bg-akr-gold/30 border border-akr-gold/40 transition-all cursor-pointer"
+                  >
+                    +₹{inc.toLocaleString('en-IN')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 space-y-1">
+              <div className="flex items-center justify-between">
+                <span>New Available to Borrow:</span>
+                <span className="font-bold text-emerald-400 font-mono">
+                  {formatCurrency(Math.max(0, (Number(quickLimitInput) || 0) - (quickLimitConsumer.totalOutstanding || 0)))}
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-500">
+                This customer will immediately be eligible to finance purchases up to this balance.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <OutlineGoldButton
+                type="button"
+                onClick={() => setQuickLimitConsumer(null)}
+                disabled={isSavingQuickLimit}
+              >
+                Cancel
+              </OutlineGoldButton>
+              <GoldButton
+                type="button"
+                onClick={handleSaveQuickLimit}
+                isLoading={isSavingQuickLimit}
+              >
+                Save & Update Limit
+              </GoldButton>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

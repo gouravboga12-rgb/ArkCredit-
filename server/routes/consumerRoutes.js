@@ -648,6 +648,9 @@ router.get('/dues', async (req, res) => {
   const consumerId = getConsumerId(req);
   if (!consumerId) return res.status(401).json({ error: 'Unauthorized' });
 
+  const consumer = await Consumer.findOne({ id: consumerId });
+  const creditLimit = consumer ? (Number(consumer.creditLimit) || 0) : 0;
+
   const plans = await DuesPlan.find({ consumerId, status: 'active' });
   const allPlans = await DuesPlan.find({ consumerId });
 
@@ -673,7 +676,11 @@ router.get('/dues', async (req, res) => {
     }
   }
 
+  const availableCredit = Math.max(0, creditLimit - totalOutstanding);
+
   return res.json({
+    creditLimit,
+    availableCredit,
     totalOutstanding,
     nextEmiAmount,
     nextEmiDate,

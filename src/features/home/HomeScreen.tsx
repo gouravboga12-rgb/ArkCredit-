@@ -232,14 +232,15 @@ export const HomeScreen: React.FC = () => {
   // If approved card request exists, but consumer profile is not yet approved in store, reconcile immediately
   useEffect(() => {
     if (approvedCardRequest && consumer) {
-      const targetLimit = approvedCardRequest?.creditLimitApproved || 50000;
-      if (!consumer.cardApproved || consumer.creditLimit !== targetLimit) {
+      if (!consumer.cardApproved || !consumer.creditLimit) {
+        const targetLimit = approvedCardRequest?.creditLimitApproved || 50000;
+        const resolvedLimit = consumer.creditLimit && consumer.creditLimit > 0 ? consumer.creditLimit : targetLimit;
         const cardNum = consumer.cardNumber || `5319 •••• •••• ${consumer.mobile.slice(-4)}`;
         const updatedConsumer: Consumer = {
           ...consumer,
           cardApproved: true,
           cardStatus: 'approved',
-          creditLimit: targetLimit,
+          creditLimit: resolvedLimit,
           cardNumber: cardNum,
         };
 
@@ -337,6 +338,69 @@ export const HomeScreen: React.FC = () => {
             }
             onPayClick={() => navigate('/app/pay')}
           />
+        )}
+
+        {/* Approved EMI Privilege Card & Borrowing Capacity Widget */}
+        {isCardApproved && !loading && (
+          <div
+            onClick={() => navigate('/app/cards')}
+            className="rounded-2xl p-4 bg-gradient-to-r from-[#17140B] via-[#241A0B] to-[#17140B] border border-akr-gold/40 shadow-md cursor-pointer hover:border-akr-gold transition-all text-left"
+          >
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-akr-gold/20 text-akr-gold flex items-center justify-center">
+                  <CreditCard className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-white tracking-wide">AKR EMI Card Borrowing Limit</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Available to Borrow
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 py-2 border-y border-zinc-800/80 items-center">
+              <div>
+                <span className="text-[9px] uppercase tracking-wider text-emerald-400 font-bold block">Can Borrow</span>
+                <span className="text-sm sm:text-base font-extrabold text-emerald-400 font-sans">
+                  {formatCurrency(Math.max(0, effectiveCreditLimit - (duesData?.totalOutstanding || 0)))}
+                </span>
+              </div>
+              <div className="border-x border-zinc-800/80 px-2 text-center">
+                <span className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold block">Total Limit</span>
+                <span className="text-xs sm:text-sm font-bold text-akr-gold font-sans">{formatCurrency(effectiveCreditLimit)}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[9px] uppercase tracking-wider text-zinc-400 font-semibold block">Active Dues</span>
+                <span className="text-xs sm:text-sm font-bold text-zinc-300 font-sans">{formatCurrency(duesData?.totalOutstanding || 0)}</span>
+              </div>
+            </div>
+
+            {/* Credit Capacity Bar */}
+            {(() => {
+              const outstanding = duesData?.totalOutstanding || 0;
+              const usedPct = effectiveCreditLimit > 0 ? Math.min(100, Math.round((outstanding / effectiveCreditLimit) * 100)) : 0;
+              const availPct = Math.max(0, 100 - usedPct);
+              return (
+                <div className="mt-2.5 space-y-1">
+                  <div className="h-1.5 w-full bg-zinc-800/90 rounded-full overflow-hidden flex">
+                    <div
+                      className="bg-amber-400 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${usedPct}%` }}
+                    />
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${availPct}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[9px] text-zinc-400 pt-0.5">
+                    <span>{usedPct}% used</span>
+                    <span className="text-emerald-400 font-semibold">{availPct}% available to spend</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         )}
 
         {/* Your Dues Section (Exact Design from image copy.png with Pay Now button & clear dates) */}

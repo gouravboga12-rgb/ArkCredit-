@@ -47,6 +47,7 @@ export interface Consumer {
   cardStatus?: 'not_applied' | 'pending' | 'approved' | 'rejected';
   cardNumber?: string; // Formatted masked card number e.g. '5123 •••• •••• 8842'
   totalOutstanding?: number; // Computed active dues
+  availableCredit?: number; // Computed borrowing capacity: creditLimit - totalOutstanding
   activePlansCount?: number;
   nextEmiAmount?: number;
   nextEmiDate?: string;

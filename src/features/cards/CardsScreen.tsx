@@ -261,14 +261,15 @@ export const CardsScreen: React.FC = () => {
 
   useEffect(() => {
     if (approvedCardRequest && consumer) {
-      const targetLimit = approvedCardRequest?.creditLimitApproved || 30000;
-      if (!consumer.cardApproved || consumer.creditLimit !== targetLimit) {
+      if (!consumer.cardApproved || !consumer.creditLimit) {
+        const targetLimit = approvedCardRequest?.creditLimitApproved || 50000;
+        const resolvedLimit = consumer.creditLimit && consumer.creditLimit > 0 ? consumer.creditLimit : targetLimit;
         const cardNum = consumer.cardNumber || `5123 •••• •••• ${consumer.mobile.slice(-4)}`;
         const updatedConsumer: Consumer = {
           ...consumer,
           cardApproved: true,
           cardStatus: 'approved',
-          creditLimit: targetLimit,
+          creditLimit: resolvedLimit,
           cardNumber: cardNum,
         };
 

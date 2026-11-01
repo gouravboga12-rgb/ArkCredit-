@@ -1173,13 +1173,14 @@ export const useStore = create<StoreState>()(
               (r: CardRequest) =>
                 (r.consumerId === c.id || r.phone === c.mobile) && r.status === 'approved'
             );
-            if (approvedReq && (!c.cardApproved || c.creditLimit !== approvedReq.creditLimitApproved)) {
+            if (approvedReq && (!c.cardApproved || !c.creditLimit)) {
               consumersNeedUpdate = true;
+              const resolvedLimit = c.creditLimit && c.creditLimit > 0 ? c.creditLimit : (approvedReq.creditLimitApproved || 50000);
               const updatedConsumer: Consumer = {
                 ...c,
                 cardApproved: true,
                 cardStatus: 'approved' as const,
-                creditLimit: approvedReq.creditLimitApproved || c.creditLimit || 30000,
+                creditLimit: resolvedLimit,
               };
               return updatedConsumer;
             }

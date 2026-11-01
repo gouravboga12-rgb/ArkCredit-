@@ -106,6 +106,7 @@ export const adminConsumerFormSchema = z.object({
   accountNumber: z.string().trim().min(4, 'Account / Customer ID must be at least 4 characters'),
   status: z.enum(['active', 'inactive']),
   password: z.string().min(6, 'Password must be at least 6 characters').optional().or(z.literal('')),
+  creditLimit: z.coerce.number().min(0, 'Credit limit cannot be negative').optional(),
 });
 
 export type AdminConsumerFormData = z.infer<typeof adminConsumerFormSchema>;

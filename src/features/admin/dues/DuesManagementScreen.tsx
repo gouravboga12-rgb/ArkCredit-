@@ -366,6 +366,34 @@ export const DuesManagementScreen: React.FC = () => {
       setConsumers((prev) =>
         prev.map((c) => (c.id === targetConsumer.id ? { ...c, creditLimit: targetLimit } : c))
       );
+
+      // Broadcast to global store so other admin screens and session sync immediately
+      useStore.getState().updateConsumerProfile(targetConsumer.id, { creditLimit: targetLimit });
+      useStore.setState((state) => ({
+        consumers: state.consumers.map((c) =>
+          c.id === targetConsumer.id ? { ...c, creditLimit: targetLimit } : c
+        ),
+        cardRequests: state.cardRequests.map((r) =>
+          r.consumerId === targetConsumer.id || r.phone === targetConsumer.mobile
+            ? { ...r, creditLimitApproved: targetLimit }
+            : r
+        ),
+      }));
+
+      const cSession = useStore.getState().consumerSession;
+      if (cSession && (cSession.consumer.id === targetConsumer.id || cSession.consumer.mobile === targetConsumer.mobile)) {
+        const updatedSession = {
+          ...cSession,
+          consumer: { ...cSession.consumer, creditLimit: targetLimit },
+        };
+        useStore.setState({ consumerSession: updatedSession });
+        try {
+          localStorage.setItem('akr_consumer_session', JSON.stringify(updatedSession));
+        } catch (e) {}
+      }
+
+      window.dispatchEvent(new CustomEvent('akr_limit_updated', { detail: { consumerId: targetConsumer.id, creditLimit: targetLimit } }));
+
       setUpgradeSuccessMsg(`Credit limit successfully upgraded to ₹${targetLimit.toLocaleString('en-IN')}!`);
       setIsUpgradingLimit(false);
       setPlanFormError(null);
