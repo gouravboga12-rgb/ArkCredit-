@@ -323,11 +323,18 @@ router.post('/payments/offline', async (req, res) => {
     const id = `pay_${Date.now().toString(36)}`;
     const txnRef = `TXN-AKR-${Date.now().toString().slice(-8)}`;
 
+    let planTypeId = 'pt_loan_emi';
+    if (planId) {
+      const p = await DuesPlan.findOne({ id: planId });
+      if (p) planTypeId = p.planTypeId || 'pt_loan_emi';
+    }
+
     const payment = await Payment.create({
       id,
       transactionRef: txnRef,
       consumerId,
       planId,
+      planTypeId,
       amount: Number(amount),
       mode: mode || 'CASH',
       status: 'success',

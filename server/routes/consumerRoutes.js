@@ -695,22 +695,11 @@ router.post('/payments/initiate', async (req, res) => {
 
     const txnRef = `TXN-AKR-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const payment = await Payment.create({
-      id: `pay_${Date.now().toString(36)}`,
-      transactionRef: txnRef,
-      consumerId,
-      planId: planId || 'plan_all',
-      amount,
-      mode: mode || 'UPI',
-      status: 'success',
-      reference: `UPI/${Math.floor(100000000000 + Math.random() * 900000000000)}`,
-      source: 'online'
-    });
-
-    // Reduce plan outstanding if specific plan
+    let planTypeId = 'pt_loan_emi';
     if (planId && planId !== 'all') {
       const plan = await DuesPlan.findOne({ id: planId, consumerId });
       if (plan) {
+        planTypeId = plan.planTypeId || 'pt_loan_emi';
         plan.outstandingAmount = Math.max(0, plan.outstandingAmount - amount);
         plan.remainingEmis = Math.max(0, plan.remainingEmis - 1);
         if (plan.outstandingAmount === 0) {
@@ -719,6 +708,19 @@ router.post('/payments/initiate', async (req, res) => {
         await plan.save();
       }
     }
+
+    const payment = await Payment.create({
+      id: `pay_${Date.now().toString(36)}`,
+      transactionRef: txnRef,
+      consumerId,
+      planId: planId || 'plan_all',
+      planTypeId,
+      amount,
+      mode: mode || 'UPI',
+      status: 'success',
+      reference: `UPI/${Math.floor(100000000000 + Math.random() * 900000000000)}`,
+      source: 'online'
+    });
 
     return res.json({
       success: true,

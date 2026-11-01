@@ -5,7 +5,7 @@ const PaymentSchema = new mongoose.Schema({
   transactionRef: { type: String, required: true, unique: true },
   consumerId: { type: String, required: true, index: true },
   planId: { type: String, required: true },
-  planTypeId: { type: String },
+  planTypeId: { type: String, default: 'pt_loan_emi' },
   amount: { type: Number, required: true },
   mode: { type: String, enum: ['UPI', 'NETBANKING', 'DEBIT_CARD', 'CREDIT_CARD', 'WALLET', 'CASH'], default: 'UPI' },
   status: { type: String, enum: ['success', 'failed', 'pending'], default: 'success' },

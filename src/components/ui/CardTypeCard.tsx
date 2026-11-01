@@ -18,7 +18,7 @@ export const CardTypeCard: React.FC<CardTypeCardProps> = ({
   className = '',
   compact = false,
 }) => {
-  const isGold = card.name.toLowerCase().includes('gold');
+  const isGold = (card?.name || '').toLowerCase().includes('gold');
 
   return (
     <div

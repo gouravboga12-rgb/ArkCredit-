@@ -142,9 +142,9 @@ export const PaymentsScreen: React.FC = () => {
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const matchRef = p.transactionRef.toLowerCase().includes(q) || p.reference.toLowerCase().includes(q);
-      const matchConsumer = p.consumerName.toLowerCase().includes(q) || p.consumerAccount.toLowerCase().includes(q);
-      const matchPlan = p.planTitle.toLowerCase().includes(q);
+      const matchRef = (p.transactionRef || '').toLowerCase().includes(q) || (p.reference || '').toLowerCase().includes(q);
+      const matchConsumer = (p.consumerName || '').toLowerCase().includes(q) || (p.consumerAccount || '').toLowerCase().includes(q);
+      const matchPlan = (p.planTitle || '').toLowerCase().includes(q);
       if (!matchRef && !matchConsumer && !matchPlan) return false;
     }
 

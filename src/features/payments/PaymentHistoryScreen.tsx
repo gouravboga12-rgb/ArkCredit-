@@ -33,11 +33,12 @@ export const PaymentHistoryScreen: React.FC = () => {
 
   // Filter payments
   const filteredPayments = payments.filter((p) => {
+    const pType = (p.planTypeId || '').toLowerCase();
     // Type filter
-    if (typeFilter === 'emi' && !p.planTypeId.includes('loan') && !p.planTypeId.includes('emi')) {
+    if (typeFilter === 'emi' && !pType.includes('loan') && !pType.includes('emi') && pType.includes('card')) {
       return false;
     }
-    if (typeFilter === 'card' && !p.planTypeId.includes('card')) {
+    if (typeFilter === 'card' && !pType.includes('card')) {
       return false;
     }
 
@@ -132,7 +133,7 @@ export const PaymentHistoryScreen: React.FC = () => {
 
                   <div className="space-y-2">
                     {groupedByMonth[month].map((p) => {
-                      const isCard = p.planTypeId.includes('card');
+                      const isCard = (p.planTypeId || '').toLowerCase().includes('card');
                       return (
                         <ListRow
                           key={p.id}

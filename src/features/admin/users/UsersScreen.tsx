@@ -79,7 +79,7 @@ export const UsersScreen: React.FC = () => {
       // 2. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchName = u.name.toLowerCase().includes(q);
+        const matchName = (u.name || '').toLowerCase().includes(q);
         const matchEmail = (u.email || '').toLowerCase().includes(q);
         const matchMobile = (u.mobile || '').includes(q);
         const matchAccount = (u.accountNumber || '').toLowerCase().includes(q);

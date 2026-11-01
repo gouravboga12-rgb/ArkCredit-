@@ -113,7 +113,7 @@ export const CardRequestsScreen: React.FC = () => {
       // 2. Card Tier Filter
       if (cardTierFilter !== 'all') {
         const tierName = cardTierFilter.toLowerCase();
-        if (!r.cardTypeName.toLowerCase().includes(tierName)) {
+        if (!(r.cardTypeName || '').toLowerCase().includes(tierName)) {
           return false;
         }
       }
@@ -142,11 +142,11 @@ export const CardRequestsScreen: React.FC = () => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         return (
-          r.fullName.toLowerCase().includes(q) ||
-          r.phone.includes(q) ||
-          r.panNumber.toLowerCase().includes(q) ||
-          r.referenceNumber.toLowerCase().includes(q) ||
-          r.cardTypeName.toLowerCase().includes(q) ||
+          (r.fullName || '').toLowerCase().includes(q) ||
+          (r.phone || '').includes(q) ||
+          (r.panNumber || '').toLowerCase().includes(q) ||
+          (r.referenceNumber || '').toLowerCase().includes(q) ||
+          (r.cardTypeName || '').toLowerCase().includes(q) ||
           (r.email && r.email.toLowerCase().includes(q))
         );
       }

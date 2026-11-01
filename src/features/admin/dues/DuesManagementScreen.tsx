@@ -501,10 +501,10 @@ export const DuesManagementScreen: React.FC = () => {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const matchTitle = p.title.toLowerCase().includes(q);
-      const matchRef = p.referenceNumber.toLowerCase().includes(q);
+      const matchTitle = (p.title || '').toLowerCase().includes(q);
+      const matchRef = (p.referenceNumber || '').toLowerCase().includes(q);
       const con = consumers.find((c) => c.id === p.consumerId);
-      const matchConsumer = con?.name.toLowerCase().includes(q) || con?.accountNumber.toLowerCase().includes(q);
+      const matchConsumer = (con?.name || '').toLowerCase().includes(q) || (con?.accountNumber || '').toLowerCase().includes(q);
       if (!matchTitle && !matchRef && !matchConsumer) return false;
     }
     return true;

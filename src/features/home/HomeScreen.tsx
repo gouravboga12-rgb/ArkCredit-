@@ -265,9 +265,10 @@ export const HomeScreen: React.FC = () => {
   }, [approvedCardRequest, consumer]);
 
   const getPlanIcon = (plan: DuesPlan) => {
-    if (plan.planTypeId.includes('card_bill')) return <Receipt className="w-4 h-4 text-akr-gold" />;
-    if (plan.planTypeId.includes('card')) return <CreditCard className="w-4 h-4 text-akr-gold" />;
-    if (plan.planTypeId.includes('loan')) return <Landmark className="w-4 h-4 text-akr-gold" />;
+    const typeId = (plan?.planTypeId || '').toLowerCase();
+    if (typeId.includes('card_bill')) return <Receipt className="w-4 h-4 text-akr-gold" />;
+    if (typeId.includes('card')) return <CreditCard className="w-4 h-4 text-akr-gold" />;
+    if (typeId.includes('loan')) return <Landmark className="w-4 h-4 text-akr-gold" />;
     return <Wallet className="w-4 h-4 text-akr-gold" />;
   };
 
@@ -620,7 +621,7 @@ export const HomeScreen: React.FC = () => {
               {recentPayments.map((pay) => (
                 <ListRow
                   key={pay.id}
-                  title={pay.planTypeId.includes('card') ? 'Card Payment' : 'EMI Payment'}
+                  title={(pay?.planTypeId || '').toLowerCase().includes('card') ? 'Card Payment' : 'EMI Payment'}
                   subtitle={pay.reference}
                   date={pay.createdAt}
                   amount={pay.amount}

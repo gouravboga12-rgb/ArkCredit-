@@ -494,10 +494,10 @@ export const ConsumerManagementScreen: React.FC = () => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
-        c.name.toLowerCase().includes(q) ||
-        c.mobile.includes(q) ||
-        c.accountNumber.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q)
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.mobile || '').includes(q) ||
+        (c.accountNumber || '').toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q)
       );
     }
     return true;
