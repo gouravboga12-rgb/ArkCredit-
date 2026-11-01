@@ -9,6 +9,12 @@ const CardType = require('../models/CardType');
 const CardRequest = require('../models/CardRequest');
 const ActivityLog = require('../models/ActivityLog');
 const AppNotification = require('../models/AppNotification');
+const {
+  emitConsumerUpdated,
+  emitDuesUpdated,
+  emitPaymentRecorded,
+  emitNotification,
+} = require('../services/socketService');
 
 // Helper to log audit activity
 async function logActivity(adminUser, action, consumerId, consumerName, oldValue, newValue) {
@@ -171,6 +177,7 @@ router.put('/consumers/:id', async (req, res) => {
       : 'Updated details';
 
     await logActivity('Admin', 'UPDATE_CONSUMER', req.params.id, updated?.name, `Limit: ₹${previousConsumer?.creditLimit || 0}`, logDetails);
+    emitConsumerUpdated(updated);
     return res.json(updated);
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -268,6 +275,7 @@ router.post(['/plans', '/dues'], async (req, res) => {
       status: req.body.status || 'active',
     });
     await logActivity('Admin', 'CREATE_DUES_PLAN', newPlan.consumerId, newPlan.title, '-', `₹${newPlan.totalPaymentDue || newPlan.principal}`);
+    emitDuesUpdated(newPlan.consumerId, { plan: newPlan, action: 'created' });
     return res.status(201).json(newPlan);
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -305,6 +313,9 @@ router.put(['/plans/:id', '/dues/:id'], async (req, res) => {
     }
 
     const updated = await DuesPlan.findOneAndUpdate({ id: req.params.id }, { $set: req.body }, { new: true });
+    if (updated) {
+      emitDuesUpdated(updated.consumerId, { plan: updated, action: 'updated' });
+    }
     return res.json(updated);
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -313,7 +324,11 @@ router.put(['/plans/:id', '/dues/:id'], async (req, res) => {
 
 router.delete(['/plans/:id', '/dues/:id'], async (req, res) => {
   try {
+    const targetPlan = await DuesPlan.findOne({ id: req.params.id });
     await DuesPlan.deleteOne({ id: req.params.id });
+    if (targetPlan) {
+      emitDuesUpdated(targetPlan.consumerId, { planId: req.params.id, action: 'deleted' });
+    }
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -465,6 +480,10 @@ router.post('/payments/offline', async (req, res) => {
     }
 
     await logActivity('Admin', 'RECORD_OFFLINE_PAYMENT', consumerId, txnRef, '-', `₹${amount} via ${mode}`);
+
+    // Real-Time Dispatch: Update customer screens and other admin tabs instantly
+    emitPaymentRecorded(payment);
+    emitDuesUpdated(consumerId, { planId, amount: Number(amount) });
 
     return res.json({
       success: true,

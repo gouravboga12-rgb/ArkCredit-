@@ -78,14 +78,30 @@ export const CardsScreen: React.FC = () => {
       } catch (e) {}
     };
 
+    const handleRealtimeConsumer = (e: any) => {
+      const detail = e.detail;
+      const myId = consumerSession?.consumer?.id;
+      const myMobile = consumerSession?.consumer?.mobile;
+      if (!detail || (detail.consumerId !== myId && detail.mobile !== myMobile)) return;
+
+      if (detail.creditLimit !== undefined) {
+        useStore.getState().updateConsumerProfile(myId || '', { creditLimit: Number(detail.creditLimit) });
+      }
+      handleSync();
+    };
+
     window.addEventListener('focus', handleSync);
-    const interval = setInterval(handleSync, 3000);
+    window.addEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+    window.addEventListener('akr_dues_realtime_update', handleSync);
+    window.addEventListener('akr_payment_realtime_update', handleSync);
 
     return () => {
       window.removeEventListener('focus', handleSync);
-      clearInterval(interval);
+      window.removeEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+      window.removeEventListener('akr_dues_realtime_update', handleSync);
+      window.removeEventListener('akr_payment_realtime_update', handleSync);
     };
-  }, []);
+  }, [consumerSession?.consumer?.id, consumerSession?.consumer?.mobile]);
 
   const addToast = (message: string) => {
     const id = Date.now().toString();

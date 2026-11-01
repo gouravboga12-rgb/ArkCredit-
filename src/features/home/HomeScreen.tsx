@@ -183,15 +183,17 @@ export const HomeScreen: React.FC = () => {
     };
   }, [consumerSession?.consumer?.id]);
 
-  // Keep store rehydrated and in sync when switching tabs or periodically
+  // Real-time synchronization: zero polling intervals, instant WebSocket push
   useEffect(() => {
     const handleSync = async () => {
       try {
         await useStore.persist.rehydrate();
-        const [freshNotifs, myReqs, profile] = await Promise.all([
+        const [freshNotifs, myReqs, profile, freshDues, freshPayments] = await Promise.all([
           consumerApi.getNotifications().catch(() => null),
           consumerApi.getMyCardRequests().catch(() => null),
           consumerApi.getProfile().catch(() => null),
+          consumerApi.getDues().catch(() => null),
+          consumerApi.getPaymentHistory().catch(() => null),
         ]);
         if (Array.isArray(freshNotifs)) {
           setLiveNotifications(freshNotifs);
@@ -202,17 +204,49 @@ export const HomeScreen: React.FC = () => {
         if (profile) {
           useStore.getState().updateConsumerProfile(profile.id, profile);
         }
+        if (freshDues) {
+          setDuesData(freshDues);
+        }
+        if (Array.isArray(freshPayments)) {
+          setRecentPayments(freshPayments.slice(0, 3));
+        }
       } catch (e) {}
     };
 
+    const handleRealtimeConsumer = (e: any) => {
+      const detail = e.detail;
+      const myId = consumerSession?.consumer?.id;
+      const myMobile = consumerSession?.consumer?.mobile;
+      if (!detail || (detail.consumerId !== myId && detail.mobile !== myMobile)) return;
+
+      if (detail.creditLimit !== undefined) {
+        useStore.getState().updateConsumerProfile(myId || '', { creditLimit: Number(detail.creditLimit) });
+      }
+      handleSync();
+    };
+
+    const handleRealtimeDues = () => {
+      handleSync();
+    };
+
+    const handleRealtimePayment = () => {
+      handleSync();
+    };
+
     window.addEventListener('focus', handleSync);
-    const interval = setInterval(handleSync, 3500);
+    window.addEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+    window.addEventListener('akr_dues_realtime_update', handleRealtimeDues);
+    window.addEventListener('akr_payment_realtime_update', handleRealtimePayment);
+    window.addEventListener('akr_notif_realtime_update', handleSync);
 
     return () => {
       window.removeEventListener('focus', handleSync);
-      clearInterval(interval);
+      window.removeEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+      window.removeEventListener('akr_dues_realtime_update', handleRealtimeDues);
+      window.removeEventListener('akr_payment_realtime_update', handleRealtimePayment);
+      window.removeEventListener('akr_notif_realtime_update', handleSync);
     };
-  }, []);
+  }, [consumerSession?.consumer?.id, consumerSession?.consumer?.mobile]);
 
   // Update session storage if live consumer has been approved or had credit limit changed
   useEffect(() => {

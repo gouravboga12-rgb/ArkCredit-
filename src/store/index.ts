@@ -197,24 +197,48 @@ export const useStore = create<StoreState>()(
       },
 
       updateConsumerProfile: (consumerId, updates) => {
-        const { consumers } = get();
+        const { consumers, consumerSession, cardRequests } = get();
         const index = consumers.findIndex((c) => c.id === consumerId);
-        if (index === -1) return null;
 
-        const updated = { ...consumers[index], ...updates };
-        const newConsumers = [...consumers];
-        newConsumers[index] = updated;
+        let updatedConsumer: Consumer | null = null;
+        let newConsumers = consumers;
 
-        // Also update consumer in consumerSession if active
-        const { consumerSession } = get();
-        let newSession = consumerSession;
-        if (consumerSession && consumerSession.consumer.id === consumerId) {
-          newSession = { ...consumerSession, consumer: updated };
-          localStorage.setItem('akr_consumer_session', JSON.stringify(newSession));
+        if (index !== -1) {
+          updatedConsumer = { ...consumers[index], ...updates };
+          newConsumers = [...consumers];
+          newConsumers[index] = updatedConsumer;
         }
 
-        set({ consumers: newConsumers, consumerSession: newSession });
-        return updated;
+        // Also update consumer in consumerSession if active
+        let newSession = consumerSession;
+        if (
+          consumerSession &&
+          (consumerSession.consumer.id === consumerId ||
+            (updates.mobile && consumerSession.consumer.mobile === updates.mobile))
+        ) {
+          const merged = { ...consumerSession.consumer, ...updates };
+          newSession = { ...consumerSession, consumer: merged };
+          updatedConsumer = merged;
+          try {
+            localStorage.setItem('akr_consumer_session', JSON.stringify(newSession));
+            localStorage.setItem('akr_consumer_profile', JSON.stringify(merged));
+          } catch (e) {
+            // ignore storage quota error
+          }
+        }
+
+        // Keep cardRequests limit in sync if creditLimit changed
+        let newCardRequests = cardRequests;
+        if (updates.creditLimit !== undefined) {
+          newCardRequests = cardRequests.map((r) =>
+            r.consumerId === consumerId
+              ? { ...r, creditLimitApproved: Number(updates.creditLimit) }
+              : r
+          );
+        }
+
+        set({ consumers: newConsumers, consumerSession: newSession, cardRequests: newCardRequests });
+        return updatedConsumer;
       },
 
       addConsumer: (consumerData) => {

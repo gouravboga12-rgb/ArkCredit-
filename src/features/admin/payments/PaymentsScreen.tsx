@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
+import { broadcastLocalRealtimeEvent } from '../../../core/realtime/socket';
 import { Payment, PaymentMode, DuesPlan, Consumer } from '../../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../../core/formatters';
 import {
@@ -80,6 +81,15 @@ export const PaymentsScreen: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    const handleRealtimePayment = () => {
+      loadData();
+    };
+
+    window.addEventListener('akr_payment_realtime_update', handleRealtimePayment);
+    return () => {
+      window.removeEventListener('akr_payment_realtime_update', handleRealtimePayment);
+    };
   }, []);
 
   const handleConsumerChangeForOffline = async (cId: string) => {
@@ -109,6 +119,13 @@ export const PaymentsScreen: React.FC = () => {
       setIsOfflineModalOpen(false);
       reset();
       loadData();
+      broadcastLocalRealtimeEvent('PAYMENT_RECEIVED', {
+        consumerId: data.consumerId,
+        amount: data.amount,
+      });
+      broadcastLocalRealtimeEvent('DUES_UPDATED', {
+        consumerId: data.consumerId,
+      });
     } catch (err: any) {
       setOfflineFormError(err.message || 'Failed to record offline payment');
     }

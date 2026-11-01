@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
+import { broadcastLocalRealtimeEvent } from '../../../core/realtime/socket';
 import { DuesPlan, PlanType, Consumer, PlanCategory } from '../../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../../core/formatters';
 import {
@@ -230,6 +231,26 @@ export const DuesManagementScreen: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    const handleRealtimeDues = () => {
+      loadData();
+    };
+    const handleRealtimePayment = () => {
+      loadData();
+    };
+    const handleRealtimeConsumer = () => {
+      loadData();
+    };
+
+    window.addEventListener('akr_dues_realtime_update', handleRealtimeDues);
+    window.addEventListener('akr_payment_realtime_update', handleRealtimePayment);
+    window.addEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+
+    return () => {
+      window.removeEventListener('akr_dues_realtime_update', handleRealtimeDues);
+      window.removeEventListener('akr_payment_realtime_update', handleRealtimePayment);
+      window.removeEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+    };
   }, []);
 
   const handlePlanValidationError = (formErrors: any) => {
@@ -292,6 +313,7 @@ export const DuesManagementScreen: React.FC = () => {
       setEditingPlan(null);
       reset();
       loadData();
+      broadcastLocalRealtimeEvent('DUES_UPDATED', { consumerId: modalConsumerId });
       setTimeout(() => setOverdueToast(null), 4000);
     } catch (err: any) {
       console.error('Error saving plan:', err);
@@ -414,6 +436,7 @@ export const DuesManagementScreen: React.FC = () => {
       try {
         await adminApi.deleteDuesPlan(id);
         loadData();
+        broadcastLocalRealtimeEvent('DUES_UPDATED', { planId: id });
       } catch (err: any) {
         alert(err.message || 'Failed to delete');
       }

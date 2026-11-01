@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
+import { broadcastLocalRealtimeEvent } from '../../../core/realtime/socket';
 import { Consumer, DueStatus, DuesPlan, Payment, PlanType, PlanCategory } from '../../../core/types';
 import { formatCurrency, formatDisplayDate, maskAccount, formatDateOnlyIST } from '../../../core/formatters';
 import {
@@ -224,6 +225,37 @@ export const ConsumerManagementScreen: React.FC = () => {
 
   useEffect(() => {
     loadData();
+
+    const handleRealtimeConsumer = (e: any) => {
+      const detail = e.detail;
+      if (detail?.consumerId) {
+        setConsumers((prev) =>
+          prev.map((c) =>
+            c.id === detail.consumerId
+              ? {
+                  ...c,
+                  creditLimit: detail.creditLimit !== undefined ? Number(detail.creditLimit) : c.creditLimit,
+                  cardApproved: detail.cardApproved !== undefined ? detail.cardApproved : c.cardApproved,
+                  cardStatus: detail.cardStatus || c.cardStatus,
+                  status: detail.status || c.status,
+                }
+              : c
+          )
+        );
+      }
+    };
+
+    const handleRealtimeDues = () => {
+      loadData();
+    };
+
+    window.addEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+    window.addEventListener('akr_dues_realtime_update', handleRealtimeDues);
+
+    return () => {
+      window.removeEventListener('akr_consumer_realtime_update', handleRealtimeConsumer);
+      window.removeEventListener('akr_dues_realtime_update', handleRealtimeDues);
+    };
   }, []);
 
   const handleCreateOrUpdate = async (data: AdminConsumerFormData) => {
@@ -395,6 +427,11 @@ export const ConsumerManagementScreen: React.FC = () => {
       }
 
       window.dispatchEvent(new CustomEvent('akr_limit_updated', { detail: { consumerId: targetConsumerForDues.id, creditLimit: targetLimit } }));
+      broadcastLocalRealtimeEvent('CONSUMER_UPDATED', {
+        consumerId: targetConsumerForDues.id,
+        mobile: targetConsumerForDues.mobile,
+        creditLimit: targetLimit,
+      });
 
       setUpgradeSuccessMsg(`Credit limit successfully upgraded to ₹${targetLimit.toLocaleString('en-IN')}!`);
       setIsUpgradingLimit(false);
@@ -452,6 +489,11 @@ export const ConsumerManagementScreen: React.FC = () => {
       }
 
       window.dispatchEvent(new CustomEvent('akr_limit_updated', { detail: { consumerId: quickLimitConsumer.id, creditLimit: targetLimit } }));
+      broadcastLocalRealtimeEvent('CONSUMER_UPDATED', {
+        consumerId: quickLimitConsumer.id,
+        mobile: quickLimitConsumer.mobile,
+        creditLimit: targetLimit,
+      });
 
       setSuccessToast(`Credit limit for ${quickLimitConsumer.name} upgraded to ₹${targetLimit.toLocaleString('en-IN')}!`);
       setQuickLimitConsumer(null);

@@ -3,7 +3,11 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { router } from './app/router';
+import { initRealtimeSocket } from './core/realtime/socket';
 import './index.css';
+
+// Initialize real-time WebSocket connection to EC2 backend
+initRealtimeSocket();
 
 const GOOGLE_CLIENT_ID =
   (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||

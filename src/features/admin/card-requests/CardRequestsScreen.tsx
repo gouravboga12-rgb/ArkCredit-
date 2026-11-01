@@ -84,18 +84,20 @@ export const CardRequestsScreen: React.FC = () => {
 
   useEffect(() => {
     loadRequests(false);
-    const interval = setInterval(() => {
-      loadRequests(false);
-    }, 3000);
 
     const onFocus = () => {
       loadRequests(false);
     };
+    const onRealtimeSync = () => {
+      loadRequests(false);
+    };
+
     window.addEventListener('focus', onFocus);
+    window.addEventListener('akr_consumer_realtime_update', onRealtimeSync);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('akr_consumer_realtime_update', onRealtimeSync);
     };
   }, []);
 

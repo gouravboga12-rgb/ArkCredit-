@@ -9,6 +9,12 @@ const CardType = require('../models/CardType');
 const CardRequest = require('../models/CardRequest');
 const AppNotification = require('../models/AppNotification');
 const ActivityLog = require('../models/ActivityLog');
+const {
+  emitConsumerUpdated,
+  emitDuesUpdated,
+  emitPaymentRecorded,
+  emitNotification,
+} = require('../services/socketService');
 const { createRazorpayOrder, verifyRazorpaySignature, RAZORPAY_KEY_ID } = require('../config/razorpay');
 const { generateOtp, sendOtpEmail } = require('../config/mailer');
 
@@ -913,6 +919,15 @@ router.post('/razorpay/verify-payment', async (req, res) => {
       console.warn('ActivityLog recording skipped:', e.message);
     }
 
+    // Real-Time Notification & Sync Dispatch
+    emitPaymentRecorded(payment);
+    emitDuesUpdated(consumerId, { planId, amount: numAmount });
+    emitNotification(consumerId, {
+      id: `notif_${Date.now()}`,
+      title: 'Weekly EMI Payment Successful!',
+      message: `₹${numAmount.toLocaleString('en-IN')} paid via Razorpay for ${planTitle}.`,
+    });
+
     return res.json({
       success: true,
       paymentId: payment.id,
@@ -1010,13 +1025,19 @@ router.get('/payments', async (req, res) => {
   return res.json(payments);
 });
 
-router.get('/payments/:id', async (req, res) => {
+router.get(['/payments/:id', '/payments/:id(*)'], async (req, res) => {
   try {
+    const rawId = req.params.id || req.params[0] || '';
+    const searchId = decodeURIComponent(rawId);
+
     const payment = await Payment.findOne({
       $or: [
-        { id: req.params.id },
-        { transactionRef: req.params.id },
-        { reference: req.params.id },
+        { id: searchId },
+        { transactionRef: searchId },
+        { reference: searchId },
+        { id: rawId },
+        { transactionRef: rawId },
+        { reference: rawId },
       ],
     }).lean();
 

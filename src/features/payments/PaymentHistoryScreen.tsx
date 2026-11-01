@@ -58,6 +58,21 @@ export const PaymentHistoryScreen: React.FC = () => {
       }
     }
     fetchData();
+
+    const handleRealtimePayment = () => {
+      fetchData();
+    };
+    const handleRealtimeDues = () => {
+      fetchData();
+    };
+
+    window.addEventListener('akr_payment_realtime_update', handleRealtimePayment);
+    window.addEventListener('akr_dues_realtime_update', handleRealtimeDues);
+
+    return () => {
+      window.removeEventListener('akr_payment_realtime_update', handleRealtimePayment);
+      window.removeEventListener('akr_dues_realtime_update', handleRealtimeDues);
+    };
   }, []);
 
   // Total paid metric
@@ -342,8 +357,8 @@ export const PaymentHistoryScreen: React.FC = () => {
                               status={p.status}
                               mode={p.mode}
                               iconType={isCard ? 'card' : 'rupee'}
-                              onDownload={() => navigate(`/app/receipt/${p.id}`)}
-                              onClick={() => navigate(`/app/receipt/${p.id}`)}
+                              onDownload={() => navigate(`/app/receipt/${encodeURIComponent(p.id)}`)}
+                              onClick={() => navigate(`/app/receipt/${encodeURIComponent(p.id)}`)}
                             />
                           );
                         })}
@@ -534,7 +549,7 @@ export const PaymentHistoryScreen: React.FC = () => {
                                 {inst.payment && (
                                   <button
                                     type="button"
-                                    onClick={() => inst.payment && navigate(`/app/receipt/${inst.payment.id}`)}
+                                    onClick={() => inst.payment && navigate(`/app/receipt/${encodeURIComponent(inst.payment.id)}`)}
                                     className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-akr-gold border border-zinc-700 transition-colors"
                                     title="View Receipt"
                                   >

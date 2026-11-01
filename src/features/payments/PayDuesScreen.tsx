@@ -338,7 +338,7 @@ export const PayDuesScreen: React.FC = () => {
                 onClick={() => {
                   const receiptId = paymentResult.payments[0]?.id || paymentResult.receiptNumber;
                   if (receiptId && receiptId !== 'N/A') {
-                    navigate(`/app/receipt/${receiptId}`);
+                    navigate(`/app/receipt/${encodeURIComponent(receiptId)}`);
                   } else {
                     navigate('/app/history');
                   }

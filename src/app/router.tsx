@@ -117,6 +117,10 @@ export const router = createBrowserRouter([
         element: <ReceiptScreen />,
       },
       {
+        path: 'receipt/*',
+        element: <ReceiptScreen />,
+      },
+      {
         path: 'cards',
         element: <CardsScreen />,
       },

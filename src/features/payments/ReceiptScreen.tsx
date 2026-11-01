@@ -10,10 +10,11 @@ import { AkrLogo } from '../../assets/logo';
 import { PageHeader, GoldButton, StatusBadge, OutlineGoldButton } from '../../components/ui';
 
 export const ReceiptScreen: React.FC = () => {
-  const { paymentId } = useParams<{ paymentId: string }>();
+  const params = useParams();
+  const rawId = params.paymentId || (params as any)['*'] || '';
+  const paymentId = decodeURIComponent(rawId);
   const navigate = useNavigate();
 
-  const payments = useStore((state) => state.payments || []);
   const duesPlans = useStore((state) => state.duesPlans || []);
   const consumers = useStore((state) => state.consumers || []);
   const consumerSession = useStore((state) => state.consumerSession);
@@ -38,8 +39,13 @@ export const ReceiptScreen: React.FC = () => {
       setError(null);
 
       // 1. Check local store first (for instantaneous render)
-      const localFound = payments.find(
-        (p) => p.id === paymentId || p.transactionRef === paymentId || p.reference === paymentId
+      const currentPayments = useStore.getState().payments || [];
+      const localFound = currentPayments.find(
+        (p) =>
+          p.id === paymentId ||
+          p.transactionRef === paymentId ||
+          p.reference === paymentId ||
+          (paymentId.includes('/') && p.reference?.endsWith(paymentId.split('/').pop() || ''))
       );
       if (localFound && isMounted) {
         setPayment(localFound);
@@ -48,7 +54,7 @@ export const ReceiptScreen: React.FC = () => {
 
       // 2. Fetch fresh live verified receipt from server
       try {
-        const livePayment = await consumerApi.getPaymentReceipt(paymentId);
+        const livePayment = await consumerApi.getPaymentReceipt(encodeURIComponent(paymentId));
         if (isMounted && livePayment) {
           setPayment(livePayment);
           setLoading(false);
@@ -59,7 +65,11 @@ export const ReceiptScreen: React.FC = () => {
         try {
           const history = await consumerApi.getPaymentHistory();
           const matched = history.find(
-            (p) => p.id === paymentId || p.transactionRef === paymentId || p.reference === paymentId
+            (p) =>
+              p.id === paymentId ||
+              p.transactionRef === paymentId ||
+              p.reference === paymentId ||
+              (paymentId.includes('/') && p.reference?.endsWith(paymentId.split('/').pop() || ''))
           );
           if (isMounted) {
             if (matched) {
@@ -85,7 +95,7 @@ export const ReceiptScreen: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [paymentId, payments]);
+  }, [paymentId]);
 
   const consumer =
     consumers.find((c) => c.id === payment?.consumerId) || consumerSession?.consumer;
