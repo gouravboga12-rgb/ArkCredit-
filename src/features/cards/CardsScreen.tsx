@@ -38,6 +38,7 @@ import { CardApplicationModal } from './CardApplicationModal';
 export const CardsScreen: React.FC = () => {
   const navigate = useNavigate();
   const [cards, setCards] = useState<CardType[]>([]);
+  const [myCardRequests, setMyCardRequests] = useState<CardRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
   const [submittedRequest, setSubmittedRequest] = useState<CardRequest | null>(null);
@@ -47,9 +48,9 @@ export const CardsScreen: React.FC = () => {
   const consumers = useStore((state) => state.consumers);
   const consumerSession = useStore((state) => state.consumerSession);
   const duesPlans = useStore((state) => state.duesPlans);
-  const cardRequests = useStore((state) => state.cardRequests);
+  const cardRequests = useStore((state) => state.cardRequests || []);
 
-  // Always resolve freshest consumer record from master consumers list
+  // Always resolve freshest consumer record from master consumers list or session
   const consumer = useMemo(() => {
     if (!consumerSession?.consumer) return null;
     const live = consumers.find(
@@ -63,11 +64,19 @@ export const CardsScreen: React.FC = () => {
     const handleSync = async () => {
       try {
         await useStore.persist.rehydrate();
+        const [myReqs, profile] = await Promise.all([
+          consumerApi.getMyCardRequests().catch(() => null),
+          consumerApi.getProfile().catch(() => null),
+        ]);
+        if (Array.isArray(myReqs)) setMyCardRequests(myReqs);
+        if (profile) {
+          useStore.getState().updateConsumerProfile(profile.id, profile);
+        }
       } catch (e) {}
     };
 
     window.addEventListener('focus', handleSync);
-    const interval = setInterval(handleSync, 2500);
+    const interval = setInterval(handleSync, 3000);
 
     return () => {
       window.removeEventListener('focus', handleSync);
@@ -84,19 +93,44 @@ export const CardsScreen: React.FC = () => {
   };
 
   useEffect(() => {
-    async function fetchCards() {
+    async function fetchCardsData() {
       try {
         setLoading(true);
-        const data = await consumerApi.getCards();
-        setCards(data);
+        const [data, myReqs, profile] = await Promise.all([
+          consumerApi.getCards().catch(() => []),
+          consumerApi.getMyCardRequests().catch(() => []),
+          consumerApi.getProfile().catch(() => null),
+        ]);
+        if (data) setCards(data);
+        if (Array.isArray(myReqs)) setMyCardRequests(myReqs);
+        if (profile) {
+          useStore.getState().updateConsumerProfile(profile.id, profile);
+          if (consumerSession) {
+            useStore.setState({
+              consumerSession: {
+                ...consumerSession,
+                consumer: { ...consumerSession.consumer, ...profile },
+              },
+            });
+            try {
+              localStorage.setItem(
+                'akr_consumer_session',
+                JSON.stringify({
+                  ...consumerSession,
+                  consumer: { ...consumerSession.consumer, ...profile },
+                })
+              );
+            } catch (e) {}
+          }
+        }
       } catch (err) {
         console.error('Failed to load cards', err);
       } finally {
         setLoading(false);
       }
     }
-    fetchCards();
-  }, []);
+    fetchCardsData();
+  }, [consumerSession?.consumer?.id]);
 
   // Single EMI Card definition
   const singleCard: CardType = cards[0] || {
@@ -123,16 +157,24 @@ export const CardsScreen: React.FC = () => {
     enabled: true,
   };
 
+  // Combine live card requests from AWS API and local store
+  const allCardRequests = useMemo(() => {
+    const combined = [...myCardRequests, ...cardRequests];
+    const map = new Map<string, CardRequest>();
+    combined.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [myCardRequests, cardRequests]);
+
   // Check card requests for current user: prioritize APPROVED > PENDING > any
   const userCardRequests = useMemo(() => {
-    if (!consumer) return [];
-    return cardRequests.filter(
+    if (!consumer) return allCardRequests;
+    return allCardRequests.filter(
       (r) =>
         r.consumerId === consumer.id ||
         r.phone === consumer.mobile ||
         (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
     );
-  }, [cardRequests, consumer]);
+  }, [allCardRequests, consumer]);
 
   const approvedCardRequest = useMemo(() => {
     return userCardRequests.find((r) => r.status === 'approved') || null;
@@ -144,21 +186,19 @@ export const CardsScreen: React.FC = () => {
 
   const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
 
-  const isDefaultApprovedUser =
-    consumer?.mobile === '9876543210' ||
-    consumer?.id === 'c_rahul_4821' ||
-    (consumer?.name ? consumer.name.toLowerCase().includes('rahul') : false);
-
   // Card Approval State
   const isApproved =
-    isDefaultApprovedUser ||
     consumer?.cardApproved === true ||
+    consumer?.cardStatus === 'approved' ||
     approvedCardRequest !== null ||
     userCardRequest?.status === 'approved';
 
   const isPending =
     !isApproved &&
-    (pendingCardRequest !== null || userCardRequest?.status === 'pending');
+    (consumer?.cardStatus === 'pending' ||
+      pendingCardRequest !== null ||
+      userCardRequest?.status === 'pending' ||
+      myCardRequests.some((r) => r.status === 'pending'));
 
   // Active dues plans linked to consumer
   const activePlans = useMemo(() => {
@@ -179,12 +219,38 @@ export const CardsScreen: React.FC = () => {
 
   const handleApplicationSuccess = (req: CardRequest) => {
     setSubmittedRequest(req);
+    setMyCardRequests((prev) => [req, ...prev]);
+
+    // Immediately update store and local session so the card status transitions to IN REVIEW
+    if (consumerSession?.consumer) {
+      const updatedConsumer = {
+        ...consumerSession.consumer,
+        cardStatus: 'pending' as const,
+      };
+      useStore.setState({
+        cardRequests: [req, ...cardRequests.filter((r) => r.id !== req.id)],
+        consumerSession: {
+          ...consumerSession,
+          consumer: updatedConsumer,
+        },
+      });
+      try {
+        localStorage.setItem(
+          'akr_consumer_session',
+          JSON.stringify({
+            ...consumerSession,
+            consumer: updatedConsumer,
+          })
+        );
+      } catch (e) {}
+    }
+
     setIsApplicationModalOpen(false);
     addToast(`EMI Card application submitted! Ref: ${req.referenceNumber}`);
   };
 
   useEffect(() => {
-    if ((approvedCardRequest || isDefaultApprovedUser) && consumer) {
+    if (approvedCardRequest && consumer) {
       const targetLimit = approvedCardRequest?.creditLimitApproved || 30000;
       if (!consumer.cardApproved || consumer.creditLimit !== targetLimit) {
         const cardNum = consumer.cardNumber || `5123 •••• •••• ${consumer.mobile.slice(-4)}`;
@@ -215,7 +281,7 @@ export const CardsScreen: React.FC = () => {
         } catch (e) {}
       }
     }
-  }, [approvedCardRequest, isDefaultApprovedUser, consumer]);
+  }, [approvedCardRequest, consumer]);
 
   const maskedCardNumber =
     consumer?.cardNumber ||
@@ -474,11 +540,15 @@ export const CardsScreen: React.FC = () => {
                   <div className="p-3 rounded-xl bg-[#141418] border border-zinc-800 text-xs space-y-1.5 font-mono">
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Reference Number:</span>
-                      <span className="font-bold text-akr-gold">{userCardRequest?.referenceNumber}</span>
+                      <span className="font-bold text-akr-gold">
+                        {userCardRequest?.referenceNumber || submittedRequest?.referenceNumber || 'CR-2026-IN-REVIEW'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Applicant:</span>
-                      <span className="text-white">{userCardRequest?.fullName}</span>
+                      <span className="text-white">
+                        {userCardRequest?.fullName || consumer?.name || 'Applicant'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Status:</span>

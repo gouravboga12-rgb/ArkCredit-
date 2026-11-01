@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { consumerApi } from '../../core/api';
-import { DuesPlan, Payment, Consumer, AppNotification } from '../../core/types';
+import { DuesPlan, Payment, Consumer, AppNotification, CardRequest } from '../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../core/formatters';
 import { AkrLogo } from '../../assets/logo';
 import {
@@ -40,7 +40,8 @@ export const HomeScreen: React.FC = () => {
   const consumers = useStore((state) => state.consumers);
   const consumerSession = useStore((state) => state.consumerSession);
   const notifications = useStore((state) => state.notifications);
-  const cardRequests = useStore((state) => state.cardRequests);
+  const cardRequests = useStore((state) => state.cardRequests || []);
+  const [myCardRequests, setMyCardRequests] = useState<CardRequest[]>([]);
 
   // Always resolve the freshest consumer record from the master consumers list in store
   const consumer = useMemo(() => {
@@ -51,16 +52,24 @@ export const HomeScreen: React.FC = () => {
     return live || consumerSession.consumer;
   }, [consumers, consumerSession]);
 
+  // Combine live card requests from AWS API and local store
+  const allCardRequests = useMemo(() => {
+    const combined = [...myCardRequests, ...cardRequests];
+    const map = new Map<string, CardRequest>();
+    combined.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [myCardRequests, cardRequests]);
+
   // Check all requests for current consumer: prioritized by APPROVED > PENDING > any
   const userCardRequests = useMemo(() => {
-    if (!consumer) return [];
-    return cardRequests.filter(
+    if (!consumer) return allCardRequests;
+    return allCardRequests.filter(
       (r) =>
         r.consumerId === consumer.id ||
         r.phone === consumer.mobile ||
         (consumer.email && r.email?.toLowerCase() === consumer.email.toLowerCase())
     );
-  }, [cardRequests, consumer]);
+  }, [allCardRequests, consumer]);
 
   const approvedCardRequest = useMemo(() => {
     return userCardRequests.find((r) => r.status === 'approved') || null;
@@ -72,26 +81,24 @@ export const HomeScreen: React.FC = () => {
 
   const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
 
-  const isDefaultApprovedUser =
-    consumer?.mobile === '9876543210' ||
-    consumer?.id === 'c_rahul_4821' ||
-    (consumer?.name ? consumer.name.toLowerCase().includes('rahul') : false);
-
   const isCardApproved =
-    isDefaultApprovedUser ||
     consumer?.cardApproved === true ||
+    consumer?.cardStatus === 'approved' ||
     approvedCardRequest !== null ||
     userCardRequest?.status === 'approved';
 
   const isCardPending =
     !isCardApproved &&
-    (pendingCardRequest !== null || userCardRequest?.status === 'pending');
+    (consumer?.cardStatus === 'pending' ||
+      pendingCardRequest !== null ||
+      userCardRequest?.status === 'pending' ||
+      myCardRequests.some((r) => r.status === 'pending'));
 
   const approvedLimit = approvedCardRequest?.creditLimitApproved || userCardRequest?.creditLimitApproved;
   const effectiveCreditLimit =
     consumer?.creditLimit && consumer.creditLimit > 0
       ? consumer.creditLimit
-      : (approvedLimit && approvedLimit > 0 ? approvedLimit : 30000);
+      : (approvedLimit && approvedLimit > 0 ? approvedLimit : 50000);
 
   const [duesData, setDuesData] = useState<{
     totalOutstanding: number;
@@ -119,15 +126,31 @@ export const HomeScreen: React.FC = () => {
     async function loadHomeData() {
       try {
         setLoading(true);
-        const [duesRes, paymentsRes, notifsRes] = await Promise.all([
+        const [duesRes, paymentsRes, notifsRes, myReqs, profile] = await Promise.all([
           consumerApi.getDues().catch(() => null),
           consumerApi.getPaymentHistory().catch(() => []),
           consumerApi.getNotifications().catch(() => []),
+          consumerApi.getMyCardRequests().catch(() => []),
+          consumerApi.getProfile().catch(() => null),
         ]);
         if (isMounted) {
           if (duesRes) setDuesData(duesRes);
           setRecentPayments(paymentsRes.slice(0, 3));
           if (Array.isArray(notifsRes)) setLiveNotifications(notifsRes);
+          if (Array.isArray(myReqs)) setMyCardRequests(myReqs);
+          if (profile) {
+            useStore.getState().updateConsumerProfile(profile.id, profile);
+            if (consumerSession) {
+              const updatedSession = {
+                ...consumerSession,
+                consumer: { ...consumerSession.consumer, ...profile },
+              };
+              useStore.setState({ consumerSession: updatedSession });
+              try {
+                localStorage.setItem('akr_consumer_session', JSON.stringify(updatedSession));
+              } catch (e) {}
+            }
+          }
         }
       } catch (err) {
         console.error('Failed to load home data', err);
@@ -139,16 +162,26 @@ export const HomeScreen: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [consumer?.id]);
+  }, [consumerSession?.consumer?.id]);
 
   // Keep store rehydrated and in sync when switching tabs or periodically
   useEffect(() => {
     const handleSync = async () => {
       try {
         await useStore.persist.rehydrate();
-        const freshNotifs = await consumerApi.getNotifications().catch(() => null);
+        const [freshNotifs, myReqs, profile] = await Promise.all([
+          consumerApi.getNotifications().catch(() => null),
+          consumerApi.getMyCardRequests().catch(() => null),
+          consumerApi.getProfile().catch(() => null),
+        ]);
         if (Array.isArray(freshNotifs)) {
           setLiveNotifications(freshNotifs);
+        }
+        if (Array.isArray(myReqs)) {
+          setMyCardRequests(myReqs);
+        }
+        if (profile) {
+          useStore.getState().updateConsumerProfile(profile.id, profile);
         }
       } catch (e) {}
     };
@@ -177,12 +210,12 @@ export const HomeScreen: React.FC = () => {
     }
   }, [consumer, consumerSession]);
 
-  // If approved card request exists or default approved user, but consumer profile is not yet approved in store, reconcile immediately
+  // If approved card request exists, but consumer profile is not yet approved in store, reconcile immediately
   useEffect(() => {
-    if ((approvedCardRequest || isDefaultApprovedUser) && consumer) {
-      const targetLimit = approvedCardRequest?.creditLimitApproved || 30000;
+    if (approvedCardRequest && consumer) {
+      const targetLimit = approvedCardRequest?.creditLimitApproved || 50000;
       if (!consumer.cardApproved || consumer.creditLimit !== targetLimit) {
-        const cardNum = consumer.cardNumber || `5123 •••• •••• ${consumer.mobile.slice(-4)}`;
+        const cardNum = consumer.cardNumber || `5319 •••• •••• ${consumer.mobile.slice(-4)}`;
         const updatedConsumer: Consumer = {
           ...consumer,
           cardApproved: true,
@@ -210,7 +243,7 @@ export const HomeScreen: React.FC = () => {
         } catch (e) {}
       }
     }
-  }, [approvedCardRequest, isDefaultApprovedUser, consumer]);
+  }, [approvedCardRequest, consumer]);
 
   const getPlanIcon = (plan: DuesPlan) => {
     if (plan.planTypeId.includes('card_bill')) return <Receipt className="w-4 h-4 text-akr-gold" />;

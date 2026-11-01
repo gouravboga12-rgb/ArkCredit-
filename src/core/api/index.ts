@@ -232,6 +232,9 @@ export const consumerApi = {
   // Cards
   getCards: () => request<CardType[]>('/consumer/cards', {}, 'consumer'),
 
+  getMyCardRequests: () =>
+    request<CardRequest[]>('/consumer/cards/my-requests', {}, 'consumer'),
+
   submitCardRequest: (data: Omit<CardRequest, 'id' | 'referenceNumber' | 'status' | 'createdAt' | 'updatedAt'>) =>
     request<CardRequest>('/consumer/cards/apply', {
       method: 'POST',

@@ -754,23 +754,62 @@ router.post('/cards/apply', async (req, res) => {
     const consumerId = getConsumerId(req);
     const id = `req_${Date.now().toString(36)}`;
     const refNum = `CR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const targetConsumerId = consumerId || req.body.consumerId;
 
     const cardRequest = await CardRequest.create({
       ...req.body,
       id,
       referenceNumber: refNum,
-      consumerId: consumerId || req.body.consumerId,
+      consumerId: targetConsumerId,
       status: 'pending',
     });
 
-    if (consumerId || req.body.consumerId) {
+    if (targetConsumerId) {
       await Consumer.updateOne(
-        { id: consumerId || req.body.consumerId },
+        { id: targetConsumerId },
+        { $set: { cardStatus: 'pending' } }
+      );
+    } else if (req.body.phone || req.body.email) {
+      await Consumer.updateOne(
+        { $or: [{ mobile: req.body.phone }, { email: req.body.email }] },
         { $set: { cardStatus: 'pending' } }
       );
     }
 
+    const resolvedConsumerId =
+      targetConsumerId ||
+      (await Consumer.findOne({ $or: [{ mobile: req.body.phone }, { email: req.body.email }] }))?.id;
+
+    if (resolvedConsumerId) {
+      await AppNotification.create({
+        id: `notif_${Date.now().toString(36)}`,
+        consumerId: resolvedConsumerId,
+        title: 'Card Application Submitted',
+        message: `Your application for the ${req.body.cardTypeName || 'AKR EMI Privilege Card'} (Ref: ${refNum}) has been submitted successfully and is under verification.`,
+        type: 'general',
+        read: false,
+      });
+    }
+
     return res.status(201).json(cardRequest);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/cards/my-requests', async (req, res) => {
+  try {
+    const consumerId = getConsumerId(req);
+    if (!consumerId) return res.json([]);
+    const consumer = await Consumer.findOne({ id: consumerId });
+    const filter = {
+      $or: [
+        { consumerId },
+        ...(consumer ? [{ phone: consumer.mobile }, { email: consumer.email }] : [])
+      ]
+    };
+    const requests = await CardRequest.find(filter).sort({ createdAt: -1 });
+    return res.json(requests);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

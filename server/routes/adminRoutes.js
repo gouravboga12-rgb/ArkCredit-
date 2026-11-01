@@ -446,14 +446,50 @@ router.put('/card-requests/:id/status', async (req, res) => {
         : { $or: [{ mobile: updated.phone }, { email: updated.email }] };
 
       const randomLast4 = Math.floor(1000 + Math.random() * 9000);
+      const assignedLimit = creditLimit ? Number(creditLimit) : 50000;
       await Consumer.updateOne(consumerFilter, {
         $set: {
           cardApproved: true,
           cardStatus: 'approved',
-          creditLimit: creditLimit ? Number(creditLimit) : 50000,
+          creditLimit: assignedLimit,
           cardNumber: `5319 •••• •••• ${randomLast4}`,
         },
       });
+
+      const matchedConsumer = await Consumer.findOne(consumerFilter);
+      if (matchedConsumer) {
+        await AppNotification.create({
+          id: `notif_${Date.now().toString(36)}`,
+          consumerId: matchedConsumer.id,
+          title: 'EMI Privilege Card Approved & Dispatched!',
+          message: `Congratulations! Your AKR EMI Privilege Card application (Ref: ${updated.referenceNumber}) has been approved with a credit limit of ₹${assignedLimit.toLocaleString('en-IN')}. Your card is now active for in-store purchases!`,
+          type: 'general',
+          read: false,
+        });
+      }
+    } else if (status === 'rejected' && updated) {
+      const consumerFilter = updated.consumerId
+        ? { id: updated.consumerId }
+        : { $or: [{ mobile: updated.phone }, { email: updated.email }] };
+
+      await Consumer.updateOne(consumerFilter, {
+        $set: {
+          cardApproved: false,
+          cardStatus: 'rejected',
+        },
+      });
+
+      const matchedConsumer = await Consumer.findOne(consumerFilter);
+      if (matchedConsumer) {
+        await AppNotification.create({
+          id: `notif_${Date.now().toString(36)}`,
+          consumerId: matchedConsumer.id,
+          title: 'Card Application Update',
+          message: `Your AKR EMI Privilege Card application (Ref: ${updated.referenceNumber}) could not be approved at this time. Remarks: ${remarks || 'Incomplete KYC criteria.'}`,
+          type: 'alert',
+          read: false,
+        });
+      }
     }
 
     await logActivity('Admin', `CARD_REQUEST_${status.toUpperCase()}`, updated?.consumerId || 'new', updated?.fullName, 'pending', status);
