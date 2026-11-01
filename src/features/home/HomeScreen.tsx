@@ -40,6 +40,7 @@ export const HomeScreen: React.FC = () => {
   const consumers = useStore((state) => state.consumers);
   const consumerSession = useStore((state) => state.consumerSession);
   const notifications = useStore((state) => state.notifications);
+  const duesPlans = useStore((state) => state.duesPlans || []);
   const cardRequests = useStore((state) => state.cardRequests || []);
   const [myCardRequests, setMyCardRequests] = useState<CardRequest[]>([]);
 
@@ -105,8 +106,26 @@ export const HomeScreen: React.FC = () => {
     nextEmiAmount: number;
     nextEmiDate: string;
     isDueSoon: boolean;
+    dueStatus?: string;
     plans: DuesPlan[];
+    allPlans?: DuesPlan[];
   } | null>(null);
+
+  // Distinguish between brand-new user with 0 loans ever vs. returning user who cleared past loans
+  const userAllPlans = useMemo(() => {
+    if (duesData?.allPlans && duesData.allPlans.length > 0) {
+      return duesData.allPlans;
+    }
+    if (!consumer) return [];
+    return duesPlans.filter((p) => p.consumerId === consumer.id);
+  }, [duesData?.allPlans, duesPlans, consumer]);
+
+  const activePlansCount = duesData?.plans?.length || 0;
+  const hasCompletedPastLoans = useMemo(() => {
+    return userAllPlans.some(
+      (p) => p.status === 'closed' || p.outstandingAmount === 0 || p.remainingEmis === 0
+    );
+  }, [userAllPlans]);
 
   const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
   const [liveNotifications, setLiveNotifications] = useState<AppNotification[]>([]);
@@ -324,11 +343,27 @@ export const HomeScreen: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-xs uppercase tracking-wider font-bold text-akr-text-muted flex items-center gap-1.5">
               <span>Weekly EMI Payments</span>
-              <span className="text-[10px] bg-emerald-500/15 text-emerald-400 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
-                {duesData?.plans.length || 0} Pending
-              </span>
+              {activePlansCount > 0 ? (
+                <span className="text-[10px] bg-amber-500/15 text-amber-400 font-mono px-2 py-0.5 rounded-full border border-amber-500/30">
+                  {activePlansCount} Pending
+                </span>
+              ) : hasCompletedPastLoans ? (
+                <span className="text-[10px] bg-emerald-500/15 text-emerald-400 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  0 Pending
+                </span>
+              ) : (
+                <span className="text-[10px] bg-zinc-800 text-zinc-400 font-mono px-2 py-0.5 rounded-full border border-zinc-700">
+                  0 Active
+                </span>
+              )}
             </h3>
-            <span className="text-[11px] text-akr-gold font-medium">Clear Dates & Schedule</span>
+            <span className="text-[11px] text-akr-gold font-medium">
+              {activePlansCount > 0
+                ? 'Weekly Schedule'
+                : hasCompletedPastLoans
+                ? 'All Dues Settled'
+                : 'Store Financing'}
+            </span>
           </div>
 
           {loading ? (
@@ -346,21 +381,43 @@ export const HomeScreen: React.FC = () => {
                 />
               ))}
             </div>
-          ) : (
+          ) : hasCompletedPastLoans ? (
             <div className="space-y-3">
-              {/* Clear status pill */}
+              {/* Completed past loans state */}
               <div className="p-4 rounded-2xl bg-akr-surface text-center text-xs text-zinc-400 border border-zinc-800 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
                     <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-white text-xs">All Payments are Clear!</p>
-                    <p className="text-[10px] text-zinc-400">No pending weekly dues or overdue EMIs.</p>
+                    <p className="text-[10px] text-zinc-400">You have successfully cleared all your assigned EMI plans.</p>
                   </div>
                 </div>
                 <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-500/25 font-bold uppercase">
                   Clear
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Brand new customer with 0 loans assigned yet */}
+              <div className="p-4 rounded-2xl bg-[#141418] border border-zinc-800 flex items-center justify-between text-left">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-akr-gold/15 border border-akr-gold/30 flex items-center justify-center text-akr-gold flex-shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-white text-xs">No Active Loans or EMIs</p>
+                    <p className="text-[10px] text-zinc-400 mt-0.5 leading-relaxed">
+                      {isCardApproved
+                        ? `Your ${formatCurrency(effectiveCreditLimit)} EMI credit limit is ready to use in-store. EMIs will appear here once you make a purchase.`
+                        : 'No EMI plans have been assigned to your account yet.'}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-zinc-800/80 text-akr-gold text-[10px] font-bold border border-akr-gold/30 uppercase tracking-wider whitespace-nowrap ml-2">
+                  {isCardApproved ? 'Available' : 'No Loans'}
                 </span>
               </div>
 
