@@ -390,6 +390,11 @@ export const adminApi = {
       body: JSON.stringify(updates),
     }, 'admin'),
 
+  deletePlanType: (id: string) =>
+    request<{ success: boolean; message?: string }>(`/admin/plan-types/${id}`, {
+      method: 'DELETE',
+    }, 'admin'),
+
   getPayments: () =>
     request<Array<Payment & {
       consumerName: string;

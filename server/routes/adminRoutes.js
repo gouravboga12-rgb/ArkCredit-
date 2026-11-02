@@ -524,6 +524,19 @@ router.put('/plan-types/:id', async (req, res) => {
   }
 });
 
+router.delete('/plan-types/:id', async (req, res) => {
+  try {
+    const deleted = await PlanType.findOneAndDelete({ id: req.params.id });
+    if (!deleted) {
+      return res.status(404).json({ error: 'Plan type not found' });
+    }
+    await logActivity('Admin', 'DELETE_PLAN_TYPE', req.params.id, deleted.name, '-', 'Deleted plan type');
+    return res.json({ success: true, message: 'Plan type deleted successfully' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 9. Card Types (Both /cards and /card-types)
 router.get(['/cards', '/card-types'], async (req, res) => {
   try {

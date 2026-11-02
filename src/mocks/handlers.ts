@@ -768,6 +768,25 @@ export const handlers = [
     return HttpResponse.json(updated);
   }),
 
+  http.delete('/api/admin/plan-types/:id', async ({ params, request }) => {
+    await handleMiddleware();
+    const token = getAuthHeader(request);
+    if (!token || !token.startsWith('mock_admin_token_')) {
+      return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { id } = params;
+    const state = useStore.getState();
+    const adminName = state.adminSession?.admin.name || 'Admin';
+
+    const deleted = state.deletePlanType(id as string, adminName);
+    if (!deleted) {
+      return HttpResponse.json({ error: 'Plan type not found' }, { status: 404 });
+    }
+
+    return HttpResponse.json({ success: true, message: 'Plan type deleted successfully' });
+  }),
+
   http.get('/api/admin/payments', async ({ request }) => {
     await handleMiddleware();
     const token = getAuthHeader(request);

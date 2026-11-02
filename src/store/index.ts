@@ -71,6 +71,7 @@ interface StoreState {
   // Plan Type operations
   addPlanType: (pt: Omit<PlanType, 'id'>, adminName: string) => PlanType;
   updatePlanType: (id: string, updates: Partial<PlanType>, adminName: string) => PlanType | null;
+  deletePlanType: (id: string, adminName: string) => boolean;
 
   // Dues Plan operations
   addDuesPlan: (plan: Omit<DuesPlan, 'id' | 'createdAt' | 'updatedAt'>, adminName: string) => DuesPlan;
@@ -340,6 +341,26 @@ export const useStore = create<StoreState>()(
           planTypes: state.planTypes.map((p) => (p.id === id ? updatedPt : p)),
         }));
         return updatedPt;
+      },
+
+      deletePlanType: (id, adminName) => {
+        const { planTypes } = get();
+        const oldPt = planTypes.find((p) => p.id === id);
+        if (!oldPt) return false;
+
+        get().logActivity({
+          adminUser: adminName,
+          action: 'DELETE_PLAN_TYPE',
+          consumerId: '-',
+          consumerName: 'System Master Data',
+          oldValue: `${oldPt.name} (${oldPt.category})`,
+          newValue: 'Deleted',
+        });
+
+        set((state) => ({
+          planTypes: state.planTypes.filter((p) => p.id !== id),
+        }));
+        return true;
       },
 
       addDuesPlan: (planData, adminName) => {

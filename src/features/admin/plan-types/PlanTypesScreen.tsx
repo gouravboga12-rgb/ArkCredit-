@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layers, Plus, Edit, CheckCircle, XCircle, Landmark, CreditCard, Receipt, Wallet, ShoppingBag, Sparkles } from 'lucide-react';
+import { Layers, Plus, Edit, Trash2, CheckCircle, XCircle, Landmark, CreditCard, Receipt, Wallet, ShoppingBag, Sparkles } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { PlanType, PlanCategory } from '../../../core/types';
 import { Modal, InputField, GoldButton, StatusBadge } from '../../../components/ui';
@@ -10,6 +10,7 @@ export const PlanTypesScreen: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPt, setEditingPt] = useState<PlanType | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<PlanCategory>('LOAN_EMI');
@@ -77,6 +78,21 @@ export const PlanTypesScreen: React.FC = () => {
       loadPlanTypes();
     } catch (err: any) {
       alert(err.message || 'Failed to save plan type');
+    }
+  };
+
+  const handleDelete = async (pt: PlanType) => {
+    if (!window.confirm(`Are you sure you want to permanently delete plan type "${pt.name}"?`)) {
+      return;
+    }
+    try {
+      setDeletingId(pt.id);
+      await adminApi.deletePlanType(pt.id);
+      await loadPlanTypes();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete plan type');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -148,13 +164,25 @@ export const PlanTypesScreen: React.FC = () => {
               <span className="text-[10px] text-zinc-500">
                 {pt.enabled ? 'Assignable to consumers' : 'Disabled for new plans'}
               </span>
-              <button
-                onClick={() => openEdit(pt)}
-                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white"
-                title="Edit Plan Type"
-              >
-                <Edit className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => openEdit(pt)}
+                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                  title="Edit Plan Type"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(pt)}
+                  disabled={deletingId === pt.id}
+                  className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-800/40 hover:border-red-600/60 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Delete Plan Type"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
