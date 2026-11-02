@@ -30,6 +30,7 @@ import {
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
 import { formatCurrency, formatDisplayDate } from '../../../core/formatters';
+import { calculatePlanOverdue } from '../../../core/domain';
 import { StatusBadge } from '../../../components/ui';
 
 export const DashboardScreen: React.FC = () => {
@@ -80,18 +81,12 @@ export const DashboardScreen: React.FC = () => {
     .slice(0, 5);
 
   // Overdue Plans Filter & Metrics for Overdue Checking Section
-  const isPlanOverdue = (p: any) =>
-    p.status === 'active' &&
-    p.outstandingAmount > 0 &&
-    (Boolean(p.overdueAmount && p.overdueAmount > 0) ||
-      Boolean(p.nextEmiDate && new Date(p.nextEmiDate) < new Date()));
-
-  const overduePlans = duesPlans.filter(isPlanOverdue);
+  const overduePlans = duesPlans.filter((p: any) => calculatePlanOverdue(p).isOverdue);
   const totalOverdueBase = overduePlans.reduce(
-    (sum, p) => sum + (p.emiAmount * (p.missedWeeks || p.missedMonths || 1)),
+    (sum, p: any) => sum + calculatePlanOverdue(p).overdueEmiTotal,
     0
   );
-  const totalOverdueLateFees = overduePlans.reduce((sum, p) => sum + (p.overdueAmount || 0), 0);
+  const totalOverdueLateFees = overduePlans.reduce((sum, p: any) => sum + (p.overdueAmount || 0), 0);
   const totalMandatoryOverdue = totalOverdueBase + totalOverdueLateFees;
 
   // Real Collections per month computed from real payments (or empty)
@@ -408,8 +403,9 @@ export const DashboardScreen: React.FC = () => {
                 <tbody className="divide-y divide-red-950/60">
                   {overduePlans.map((p) => {
                     const consumer = consumers.find((c) => c.id === p.consumerId);
-                    const missedWks = p.missedWeeks || p.missedMonths || 1;
-                    const mandatoryMin = (p.emiAmount * missedWks) + (p.overdueAmount || 0);
+                    const overdueInfo = calculatePlanOverdue(p);
+                    const missedWks = overdueInfo.missedWeeks;
+                    const mandatoryMin = overdueInfo.mandatoryOverduePayable;
                     return (
                       <tr key={p.id} className="hover:bg-red-950/30 transition-colors">
                         <td className="py-3 px-4 font-bold text-white">
@@ -428,7 +424,8 @@ export const DashboardScreen: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-3 px-4 font-semibold text-zinc-300">
-                          {formatCurrency(p.emiAmount)} /wk
+                          {formatCurrency(overdueInfo.overdueEmiTotal)}
+                          <span className="text-[10px] text-zinc-500 block">({missedWks}x {formatCurrency(p.emiAmount)})</span>
                         </td>
                         <td className="py-3 px-4 font-bold text-red-400">
                           +{formatCurrency(p.overdueAmount || 0)}
@@ -455,8 +452,9 @@ export const DashboardScreen: React.FC = () => {
             <div className="lg:hidden space-y-2.5">
               {overduePlans.map((p) => {
                 const consumer = consumers.find((c) => c.id === p.consumerId);
-                const missedWks = p.missedWeeks || p.missedMonths || 1;
-                const mandatoryMin = (p.emiAmount * missedWks) + (p.overdueAmount || 0);
+                const overdueInfo = calculatePlanOverdue(p);
+                const missedWks = overdueInfo.missedWeeks;
+                const mandatoryMin = overdueInfo.mandatoryOverduePayable;
                 return (
                   <div
                     key={p.id}
@@ -468,7 +466,7 @@ export const DashboardScreen: React.FC = () => {
                         <span className="text-[10px] font-mono text-zinc-400">{consumer?.accountNumber}</span>
                       </div>
                       <span className="text-[10px] bg-red-900/60 border border-red-600 text-red-200 font-bold px-2 py-0.5 rounded-full">
-                        {missedWks} wk missed
+                        {missedWks} {missedWks === 1 ? 'wk' : 'wks'} missed
                       </span>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-red-900/40 text-xs">

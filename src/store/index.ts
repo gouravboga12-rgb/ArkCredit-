@@ -32,7 +32,7 @@ import {
   INITIAL_ACTIVITY_LOGS,
   INITIAL_CARD_REQUESTS,
 } from '../mocks/seedData';
-import { applyPaymentToPlan, allocatePayAllAmount } from '../core/domain';
+import { applyPaymentToPlan, allocatePayAllAmount, calculatePlanOverdue } from '../core/domain';
 
 interface StoreState {
   // Collections
@@ -774,11 +774,14 @@ export const useStore = create<StoreState>()(
         if (!plan) return null;
         const consumer = consumers.find((c) => c.id === plan.consumerId);
 
+        const overdueInfo = calculatePlanOverdue(plan);
+        const effectiveWeeks = missedWeeks && missedWeeks > 0 ? missedWeeks : (overdueInfo.missedWeeks || 1);
+
         const updatedPlan: DuesPlan = {
           ...plan,
           overdueAmount,
-          missedWeeks: missedWeeks || 1,
-          missedMonths: missedWeeks || 1,
+          missedWeeks: effectiveWeeks,
+          missedMonths: effectiveWeeks,
           overdueRemarks: remarks,
           overdueAssignedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -792,13 +795,13 @@ export const useStore = create<StoreState>()(
           consumerId: plan.consumerId,
           consumerName: consumer?.name || 'Consumer',
           oldValue: `Overdue: ₹${plan.overdueAmount || 0}`,
-          newValue: `Late Fee: ₹${overdueAmount} (${missedWeeks || 1} wk, total: ₹${(plan.emiAmount * (missedWeeks || 1)) + overdueAmount})`,
+          newValue: `Late Fee: ₹${overdueAmount} (${effectiveWeeks} ${effectiveWeeks === 1 ? 'wk' : 'wks'}, total: ₹${(plan.emiAmount * effectiveWeeks) + overdueAmount})`,
         });
 
         get().sendNotification({
           consumerId: plan.consumerId,
           title: '⚠️ Overdue Notice & Late Fee Applied',
-          message: `A late payment charge of ₹${overdueAmount.toLocaleString('en-IN')} has been applied to "${plan.title}". Total overdue payable is ₹${((plan.emiAmount * (missedWeeks || 1)) + overdueAmount).toLocaleString('en-IN')}. Please clear immediately.`,
+          message: `A late payment charge of ₹${overdueAmount.toLocaleString('en-IN')} has been applied to "${plan.title}". Total overdue payable is ₹${((plan.emiAmount * effectiveWeeks) + overdueAmount).toLocaleString('en-IN')}. Please clear immediately.`,
           type: 'emi_reminder',
         });
 

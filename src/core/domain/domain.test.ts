@@ -9,6 +9,7 @@ import {
   advanceDateByOneMonth,
   allocatePayAllAmount,
   applyPaymentToPlan,
+  calculatePlanOverdue,
 } from './index';
 import { DuesPlan } from '../types';
 
@@ -303,5 +304,44 @@ describe('Financial Domain Calculations & Business Rules', () => {
       missedMonths: 1,
     };
     expect(determineDueStatus([planWithLateFee], true, refDate)).toBe('Overdue');
+  });
+
+  it('accurately computes 28-day overdue as 4 weeks missed and ₹5,000 overdue EMIs', () => {
+    const plan: DuesPlan = {
+      id: 'plan_test_28d',
+      consumerId: 'c1',
+      planTypeId: 'pt1',
+      title: 'Personal Loan EMI',
+      referenceNumber: 'LN-2676-9085',
+      status: 'active',
+      outstandingAmount: 15000,
+      totalPaymentDue: 15000,
+      principal: 15000,
+      interest: 0,
+      processingFee: 0,
+      emiAmount: 1250,
+      nextEmiDate: '2026-10-05',
+      frequency: 'weekly',
+      totalEmis: 12,
+      remainingEmis: 12,
+      tenureWeeks: 12,
+      createdAt: '2026-10-05',
+      updatedAt: '2026-10-05',
+    };
+
+    // Reference Date is 2 Nov 2026 (28 days after 5 Oct 2026)
+    const refDate = new Date('2026-11-02');
+    const overdue = calculatePlanOverdue(plan, refDate);
+
+    expect(overdue.isOverdue).toBe(true);
+    expect(overdue.daysOverdue).toBe(28);
+    expect(overdue.missedWeeks).toBe(4);
+    expect(overdue.overdueEmiTotal).toBe(5000); // 4 * 1250
+    expect(overdue.mandatoryOverduePayable).toBe(5000);
+
+    // If late fee of ₹250 is added
+    const planWithFee = { ...plan, overdueAmount: 250 };
+    const overdueWithFee = calculatePlanOverdue(planWithFee, refDate);
+    expect(overdueWithFee.mandatoryOverduePayable).toBe(5250); // 5000 + 250
   });
 });

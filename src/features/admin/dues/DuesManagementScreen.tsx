@@ -33,6 +33,7 @@ import { useStore } from '../../../store';
 import { broadcastLocalRealtimeEvent } from '../../../core/realtime/socket';
 import { DuesPlan, PlanType, Consumer, PlanCategory } from '../../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../../core/formatters';
+import { calculatePlanOverdue } from '../../../core/domain';
 import {
   adminDuesPlanFormSchema,
   AdminDuesPlanFormData,
@@ -598,18 +599,17 @@ export const DuesManagementScreen: React.FC = () => {
     return Math.max(0, diff);
   };
 
-  // Overdue plans: active with outstanding balance that crossed due date by 1+ days or already have overdue fees
-  const overduePlans = plans.filter((p) => {
-    if (p.status !== 'active' || p.outstandingAmount <= 0) return false;
-    const days = calculateDaysOverdue(p.nextEmiDate);
-    return days >= 1 || (p.overdueAmount && p.overdueAmount > 0);
-  });
+  // Overdue plans: active with outstanding balance that are past due date or already have overdue fees
+  const overduePlans = plans.filter((p) => calculatePlanOverdue(p).isOverdue);
 
   const openOverdueModal = (plan: DuesPlan) => {
+    const overdueInfo = calculatePlanOverdue(plan);
     setOverdueTargetPlan(plan);
     setManualOverdueFee(plan.overdueAmount || 250);
-    setMissedWeeks(plan.missedWeeks || plan.missedMonths || 1);
-    setOverdueRemarks(plan.overdueRemarks || 'Payment past due date. Late fee applied.');
+    setMissedWeeks(overdueInfo.missedWeeks);
+    setOverdueRemarks(
+      plan.overdueRemarks || `${overdueInfo.missedWeeks} weeks overdue (${overdueInfo.daysOverdue} days past due). Late fee applied.`
+    );
   };
 
   const handleSaveOverdueFee = async () => {
@@ -841,11 +841,11 @@ export const DuesManagementScreen: React.FC = () => {
                 <tbody className="divide-y divide-zinc-800/80">
                   {filteredPlans.map((p) => {
                     const consumer = consumers.find((c) => c.id === p.consumerId);
-                    const daysOverdue = calculateDaysOverdue(p.nextEmiDate);
-                    const isOverdue = daysOverdue >= 1;
-                    const missedWeeksCount = p.missedWeeks || p.missedMonths || 1;
-                    const mandatoryPayable =
-                      (p.emiAmount * missedWeeksCount) + (p.overdueAmount || 0);
+                    const overdueInfo = calculatePlanOverdue(p);
+                    const daysOverdue = overdueInfo.daysOverdue;
+                    const isOverdue = overdueInfo.isOverdue;
+                    const missedWeeksCount = overdueInfo.missedWeeks;
+                    const mandatoryPayable = overdueInfo.mandatoryOverduePayable;
 
                     return (
                       <tr
@@ -891,12 +891,15 @@ export const DuesManagementScreen: React.FC = () => {
 
                             <td className="py-3.5 px-4">
                               <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-800 text-amber-300 border border-zinc-700">
-                                {missedWeeksCount === 2 ? '2 Weeks Missed' : `${missedWeeksCount} Week${missedWeeksCount > 1 ? 's' : ''} Missed`}
+                                {missedWeeksCount} {missedWeeksCount === 1 ? 'Week' : 'Weeks'} Missed
                               </span>
                             </td>
 
                             <td className="py-3.5 px-4 font-mono text-zinc-200">
-                              {formatCurrency(p.emiAmount)}
+                              <div>{formatCurrency(overdueInfo.overdueEmiTotal)}</div>
+                              <div className="text-[10px] text-zinc-500 font-sans">
+                                ({missedWeeksCount}x {formatCurrency(p.emiAmount)})
+                              </div>
                             </td>
 
                             <td className="py-3.5 px-4">
@@ -1086,7 +1089,7 @@ export const DuesManagementScreen: React.FC = () => {
                       <BookOpen className="w-3.5 h-3.5" />
                       <span>Ledger</span>
                     </button>
-                    {calculateDaysOverdue(p.nextEmiDate) >= 1 && (
+                    {calculatePlanOverdue(p).isOverdue && (
                       <button
                         onClick={() => openOverdueModal(p)}
                         className="px-2.5 py-1.5 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500 hover:text-white border border-red-500/40 text-xs font-bold flex items-center gap-1 transition-colors"
@@ -1809,39 +1812,59 @@ export const DuesManagementScreen: React.FC = () => {
 
             {/* Missed Weeks Tenure */}
             <div>
-              <label className="block text-xs font-bold text-zinc-300 uppercase mb-1.5">
-                Missed Weekly EMI Tenure *
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMissedWeeks(1)}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    missedWeeks === 1
-                      ? 'bg-akr-gold/15 border-akr-gold text-white shadow-sm'
-                      : 'bg-[#18181B] border-zinc-700 text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <span className="font-bold block text-xs">1 Week Missed</span>
-                  <span className="text-[10px] text-zinc-400 block mt-0.5">
-                    Current Weekly EMI ({formatCurrency(overdueTargetPlan.emiAmount)}) + Penalty
-                  </span>
-                </button>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-zinc-300 uppercase">
+                  Missed Weekly EMI Tenure *
+                </label>
+                {(() => {
+                  const calculated = overdueTargetPlan.nextEmiDate ? calculatePlanOverdue(overdueTargetPlan).missedWeeks : 1;
+                  return (
+                    <span className="text-[10px] text-amber-400 font-medium">
+                      Calculated: {calculated} {calculated === 1 ? 'Week' : 'Weeks'} Missed
+                    </span>
+                  );
+                })()}
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => setMissedWeeks(2)}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    missedWeeks === 2
-                      ? 'bg-akr-gold/15 border-akr-gold text-white shadow-sm'
-                      : 'bg-[#18181B] border-zinc-700 text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <span className="font-bold block text-xs">2 Weeks Missed</span>
-                  <span className="text-[10px] text-zinc-400 block mt-0.5">
-                    2x Weekly EMIs ({formatCurrency(overdueTargetPlan.emiAmount * 2)}) + Penalty
-                  </span>
-                </button>
+              {/* Quick Presets */}
+              <div className="grid grid-cols-4 gap-1.5 mb-2">
+                {[1, 2, 3, 4].map((w) => {
+                  const maxEmis = overdueTargetPlan.remainingEmis || overdueTargetPlan.totalEmis || 12;
+                  if (w > maxEmis) return null;
+                  return (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => setMissedWeeks(w)}
+                      className={`py-2 px-2 rounded-xl border text-center transition-all cursor-pointer ${
+                        missedWeeks === w
+                          ? 'bg-akr-gold/20 border-akr-gold text-akr-gold font-bold shadow-sm'
+                          : 'bg-[#18181B] border-zinc-700 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="block text-xs font-bold">{w} {w === 1 ? 'Week' : 'Weeks'}</span>
+                      <span className="text-[10px] font-mono text-zinc-400 block">
+                        {formatCurrency(overdueTargetPlan.emiAmount * w)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Direct Input for Custom Weeks */}
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-400 text-xs">Custom Missed Weeks:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={overdueTargetPlan.remainingEmis || overdueTargetPlan.totalEmis || 52}
+                  value={missedWeeks}
+                  onChange={(e) => setMissedWeeks(Math.max(1, Math.min(overdueTargetPlan.remainingEmis || 52, Number(e.target.value) || 1)))}
+                  className="w-24 px-3 py-1.5 rounded-lg bg-[#18181B] border border-zinc-700 text-white font-mono text-xs focus:outline-none focus:border-akr-gold"
+                />
+                <span className="text-[10px] text-zinc-500">
+                  (Max: {overdueTargetPlan.remainingEmis || overdueTargetPlan.totalEmis} remaining EMIs)
+                </span>
               </div>
             </div>
 

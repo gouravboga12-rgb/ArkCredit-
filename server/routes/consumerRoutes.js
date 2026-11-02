@@ -17,6 +17,7 @@ const {
 } = require('../services/socketService');
 const { createRazorpayOrder, verifyRazorpaySignature, RAZORPAY_KEY_ID } = require('../config/razorpay');
 const { generateOtp, sendOtpEmail } = require('../config/mailer');
+const { calculatePlanOverdue, enrichPlanWithOverdue } = require('../services/overdueService');
 
 function maskEmail(email) {
   if (!email || !email.includes('@')) return email;
@@ -660,25 +661,33 @@ router.get('/dues', async (req, res) => {
   const plans = await DuesPlan.find({ consumerId, status: 'active' });
   const allPlans = await DuesPlan.find({ consumerId });
 
+  const enrichedPlans = plans.map(p => enrichPlanWithOverdue(p));
+  const enrichedAllPlans = allPlans.map(p => enrichPlanWithOverdue(p));
+
   let totalOutstanding = 0;
   let nextEmiAmount = 0;
   let nextEmiDate = '';
   let dueStatus = 'no_dues';
 
-  if (plans.length > 0) {
-    totalOutstanding = plans.reduce((acc, p) => acc + (p.outstandingAmount || 0), 0);
-    const sortedByDate = [...plans].sort((a, b) => new Date(a.nextEmiDate).getTime() - new Date(b.nextEmiDate).getTime());
-    nextEmiAmount = sortedByDate[0].emiAmount;
-    nextEmiDate = sortedByDate[0].nextEmiDate;
+  if (enrichedPlans.length > 0) {
+    totalOutstanding = enrichedPlans.reduce((acc, p) => acc + (p.outstandingAmount || 0), 0);
+    const overduePlans = enrichedPlans.filter(p => p.isOverdue);
 
-    const overdue = plans.find(p => (p.overdueAmount || 0) > 0);
-    if (overdue) {
+    if (overduePlans.length > 0) {
       dueStatus = 'overdue';
+      // Sum the accumulated overdue EMIs across all overdue plans
+      nextEmiAmount = overduePlans.reduce((sum, p) => sum + p.overdueEmiTotal, 0);
+      const sortedOverdue = [...overduePlans].sort((a, b) => new Date(a.nextEmiDate).getTime() - new Date(b.nextEmiDate).getTime());
+      nextEmiDate = sortedOverdue[0].nextEmiDate;
     } else {
+      const sortedByDate = [...enrichedPlans].sort((a, b) => new Date(a.nextEmiDate).getTime() - new Date(b.nextEmiDate).getTime());
+      nextEmiAmount = sortedByDate[0].emiAmount;
+      nextEmiDate = sortedByDate[0].nextEmiDate;
+
       const now = new Date();
       const emiDate = new Date(nextEmiDate);
       const diffDays = Math.ceil((emiDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      dueStatus = diffDays <= 3 ? 'due_soon' : 'on_time';
+      dueStatus = diffDays <= 7 ? 'due_soon' : 'on_time';
     }
   }
 
@@ -692,8 +701,8 @@ router.get('/dues', async (req, res) => {
     nextEmiDate,
     isDueSoon: dueStatus === 'due_soon',
     dueStatus,
-    plans,
-    allPlans
+    plans: enrichedPlans,
+    allPlans: enrichedAllPlans
   });
 });
 

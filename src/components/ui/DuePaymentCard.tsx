@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, Calendar, ArrowRight, ShieldCheck, Clock, AlertTriangle } from 'lucide-react';
 import { DuesPlan } from '../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../core/formatters';
+import { calculatePlanOverdue } from '../../core/domain';
 
 interface DuePaymentCardProps {
   plan: DuesPlan;
@@ -14,12 +15,10 @@ export const DuePaymentCard: React.FC<DuePaymentCardProps> = ({
   onPayNow,
   className = '',
 }) => {
-  // Determine due timing status
+  // Determine accurate overdue calculations and timing status
+  const overdueInfo = calculatePlanOverdue(plan);
   const isCleared = plan.status === 'closed' || plan.outstandingAmount === 0;
-  const isOverdue =
-    !isCleared &&
-    (Boolean(plan.overdueAmount && plan.overdueAmount > 0) ||
-      Boolean(plan.nextEmiDate && new Date(plan.nextEmiDate) < new Date()));
+  const isOverdue = !isCleared && overdueInfo.isOverdue;
   const isDueSoon = !isCleared && !isOverdue && plan.status === 'active';
   
   // Format clean due date
@@ -43,7 +42,7 @@ export const DuePaymentCard: React.FC<DuePaymentCardProps> = ({
             <span>{plan.title || 'EMI Payment'}</span>
             {isOverdue && (
               <span className="text-[10px] bg-red-950/80 text-red-300 border border-red-700/60 font-semibold px-2 py-0.5 rounded-full">
-                {plan.missedWeeks || plan.missedMonths || 1} wk missed
+                {overdueInfo.missedWeeks} {overdueInfo.missedWeeks === 1 ? 'wk' : 'wks'} missed
               </span>
             )}
           </h4>
@@ -103,10 +102,12 @@ export const DuePaymentCard: React.FC<DuePaymentCardProps> = ({
         {/* Right: Payment Amount */}
         <div className="text-right">
           <span className="text-[11px] font-medium text-zinc-400 block mb-0.5">
-            {isOverdue ? 'Overdue Weekly EMI' : 'Weekly Payment'}
+            {isOverdue
+              ? `Overdue Weekly EMI (${overdueInfo.missedWeeks} ${overdueInfo.missedWeeks === 1 ? 'wk' : 'wks'})`
+              : 'Weekly Payment'}
           </span>
           <span className="text-base sm:text-lg font-black text-white font-sans tracking-tight block">
-            {formatCurrency(displayEmi * (plan.missedWeeks || plan.missedMonths || 1))}
+            {formatCurrency(isOverdue ? overdueInfo.overdueEmiTotal : displayEmi)}
           </span>
           {Boolean(plan.overdueAmount && plan.overdueAmount > 0) && (
             <span className="text-[10px] text-red-400 font-semibold block">

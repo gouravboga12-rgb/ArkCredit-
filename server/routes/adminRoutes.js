@@ -15,6 +15,7 @@ const {
   emitPaymentRecorded,
   emitNotification,
 } = require('../services/socketService');
+const { calculatePlanOverdue, enrichPlanWithOverdue } = require('../services/overdueService');
 
 // Helper to log audit activity
 async function logActivity(adminUser, action, consumerId, consumerName, oldValue, newValue) {
@@ -111,7 +112,8 @@ router.get('/consumers', async (req, res) => {
         nextEmiAmount = sorted[0].emiAmount;
         nextEmiDate = sorted[0].nextEmiDate;
 
-        const overdue = consumerPlans.find((p) => (p.overdueAmount || 0) > 0);
+        const enrichedConsumerPlans = consumerPlans.map(p => enrichPlanWithOverdue(p));
+        const overdue = enrichedConsumerPlans.find((p) => p.isOverdue);
         if (overdue) dueStatus = 'overdue';
         else dueStatus = 'on_time';
       }
@@ -200,7 +202,8 @@ router.delete('/consumers/:id', async (req, res) => {
 router.get('/consumers/:id/dues', async (req, res) => {
   try {
     const dues = await DuesPlan.find({ consumerId: req.params.id }).sort({ createdAt: -1 });
-    return res.json(dues);
+    const enrichedDues = dues.map(p => enrichPlanWithOverdue(p));
+    return res.json(enrichedDues);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -210,7 +213,8 @@ router.get('/consumers/:id/dues', async (req, res) => {
 router.get(['/plans', '/dues'], async (req, res) => {
   try {
     const plans = await DuesPlan.find().sort({ createdAt: -1 });
-    return res.json(plans);
+    const enrichedPlans = plans.map(p => enrichPlanWithOverdue(p));
+    return res.json(enrichedPlans);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -339,21 +343,25 @@ router.delete(['/plans/:id', '/dues/:id'], async (req, res) => {
 router.post(['/plans/:id/overdue', '/dues/:id/overdue'], async (req, res) => {
   try {
     const { overdueAmount, missedWeeks, missedMonths, remarks } = req.body;
+    const plan = await DuesPlan.findOne({ id: req.params.id });
+    const calculatedWeeks = plan ? calculatePlanOverdue(plan).missedWeeks : 1;
+    const finalWeeks = Number(missedWeeks) || Number(missedMonths) || calculatedWeeks;
+
     const updated = await DuesPlan.findOneAndUpdate(
       { id: req.params.id },
       {
         $set: {
           overdueAmount: Number(overdueAmount) || 0,
-          missedWeeks: Number(missedWeeks) || 0,
-          missedMonths: Number(missedMonths) || 0,
+          missedWeeks: finalWeeks,
+          missedMonths: finalWeeks,
           overdueRemarks: remarks || '',
           overdueAssignedAt: new Date().toISOString(),
         },
       },
       { new: true }
     );
-    await logActivity('Admin', 'APPLY_OVERDUE_FEE', updated.consumerId, updated.title, 'No penalty', `Penalty ₹${overdueAmount}`);
-    return res.json(updated);
+    await logActivity('Admin', 'APPLY_OVERDUE_FEE', updated.consumerId, updated.title, 'No penalty', `Penalty ₹${overdueAmount} (${finalWeeks} wks)`);
+    return res.json(enrichPlanWithOverdue(updated));
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

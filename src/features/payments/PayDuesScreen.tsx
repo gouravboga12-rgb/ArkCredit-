@@ -22,7 +22,7 @@ import { consumerApi } from '../../core/api';
 import { paymentGateway } from '../../services/paymentGateway';
 import { DuesPlan, PaymentMode, PaymentResult } from '../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../core/formatters';
-import { allocatePayAllAmount } from '../../core/domain';
+import { allocatePayAllAmount, calculatePlanOverdue } from '../../core/domain';
 import {
   PageHeader,
   GoldButton,
@@ -87,12 +87,10 @@ export const PayDuesScreen: React.FC = () => {
     ? plans[0]?.nextEmiDate || ''
     : currentPlan?.nextEmiDate || '';
 
-  // Check Overdue status
+  // Check Overdue status with dynamic domain calculation
   const isPlanOverdue = (p: DuesPlan) => {
     if (!p) return false;
-    const hasLateFee = (p.overdueAmount || 0) > 0;
-    const isPastDue = Boolean(p.nextEmiDate && new Date(p.nextEmiDate) < new Date());
-    return hasLateFee || isPastDue;
+    return calculatePlanOverdue(p).isOverdue;
   };
 
   const overduePlans = isPayAll
@@ -103,15 +101,20 @@ export const PayDuesScreen: React.FC = () => {
 
   const hasOverdue = overduePlans.length > 0;
 
-  const totalLateFee = overduePlans.reduce((sum, p) => sum + (p.overdueAmount || 0), 0);
-  const totalMissedWeeks = isPayAll
-    ? overduePlans.reduce((sum, p) => Math.max(sum, p.missedWeeks || p.missedMonths || 1), 1)
-    : currentPlan?.missedWeeks || currentPlan?.missedMonths || 1;
+  const overduePlansInfo = overduePlans.map((p) => ({
+    plan: p,
+    info: calculatePlanOverdue(p),
+  }));
 
-  // Overdue EMI base (EMI * missed weeks)
+  const totalLateFee = overduePlansInfo.reduce((sum, item) => sum + item.info.lateFee, 0);
+  const totalMissedWeeks = isPayAll
+    ? overduePlansInfo.reduce((sum, item) => Math.max(sum, item.info.missedWeeks), 1)
+    : currentPlan ? calculatePlanOverdue(currentPlan).missedWeeks : 1;
+
+  // Overdue EMI base (accumulated missed weeks * weekly EMI)
   const overdueBaseEmi = isPayAll
-    ? overduePlans.reduce((sum, p) => sum + (p.emiAmount * (p.missedWeeks || p.missedMonths || 1)), 0)
-    : (currentPlan?.emiAmount || 0) * (currentPlan?.missedWeeks || currentPlan?.missedMonths || 1);
+    ? overduePlansInfo.reduce((sum, item) => sum + item.info.overdueEmiTotal, 0)
+    : (currentPlan ? calculatePlanOverdue(currentPlan).overdueEmiTotal : 0);
 
   // Non-overdue plans regular 1-month EMI when paying all
   const nonOverdueEmi = isPayAll
@@ -515,10 +518,15 @@ export const PayDuesScreen: React.FC = () => {
                     {currentPlan.tenureWeeks || currentPlan.totalEmis} Weeks
                   </span>
                 </div>
-                {Boolean(currentPlan.overdueAmount && currentPlan.overdueAmount > 0) && (
+                {currentPlan && calculatePlanOverdue(currentPlan).isOverdue && (
                   <div className="flex justify-between items-center text-red-400 font-mono bg-red-950/30 px-2 py-1 rounded border border-red-500/20">
-                    <span>Overdue Penalty ({currentPlan.missedWeeks || currentPlan.missedMonths || 1} wk late)</span>
-                    <span className="font-bold">+{formatCurrency(currentPlan.overdueAmount || 0)}</span>
+                    <span>
+                      Overdue EMIs ({calculatePlanOverdue(currentPlan).missedWeeks} {calculatePlanOverdue(currentPlan).missedWeeks === 1 ? 'wk' : 'wks'} missed)
+                    </span>
+                    <span className="font-bold">
+                      {formatCurrency(calculatePlanOverdue(currentPlan).overdueEmiTotal)}
+                      {calculatePlanOverdue(currentPlan).lateFee > 0 && ` + ${formatCurrency(calculatePlanOverdue(currentPlan).lateFee)} Fee`}
+                    </span>
                   </div>
                 )}
                 <div className="pt-2.5 mt-2 border-t border-akr-border flex justify-between items-center font-bold text-sm">
@@ -562,7 +570,7 @@ export const PayDuesScreen: React.FC = () => {
                       <div>
                         <span>
                           {hasOverdue
-                            ? `Pay Overdue Weekly EMI (${totalMissedWeeks} wk) + Late Fee`
+                            ? `Pay Overdue Weekly EMI (${totalMissedWeeks} ${totalMissedWeeks === 1 ? 'wk' : 'wks'}) + Late Fee`
                             : selectedWeeks > 1
                             ? `Pay ${selectedWeeks} Weeks EMIs`
                             : 'Pay Next Weekly EMI'}

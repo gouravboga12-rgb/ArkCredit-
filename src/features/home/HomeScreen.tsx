@@ -24,6 +24,7 @@ import { useStore } from '../../store';
 import { consumerApi } from '../../core/api';
 import { DuesPlan, Payment, Consumer, AppNotification, CardRequest } from '../../core/types';
 import { formatCurrency, formatDisplayDate } from '../../core/formatters';
+import { calculatePlanOverdue } from '../../core/domain';
 import { AkrLogo } from '../../assets/logo';
 import {
   AmountCard,
@@ -354,25 +355,26 @@ export const HomeScreen: React.FC = () => {
         {/* Main Outstanding Amount Card (Phone 2) */}
         {loading ? (
           <Skeleton className="h-44 w-full rounded-card" />
-        ) : (
-          <AmountCard
-            totalOutstanding={duesData?.totalOutstanding || 0}
-            nextEmiAmount={duesData?.nextEmiAmount || 0}
-            nextEmiDate={duesData?.nextEmiDate || ''}
-            isDueSoon={duesData?.isDueSoon || false}
-            isOverdue={Boolean(
-              duesData?.plans.some(
-                (p) =>
-                  (p.overdueAmount || 0) > 0 ||
-                  (p.nextEmiDate && new Date(p.nextEmiDate) < new Date() && p.outstandingAmount > 0)
-              )
-            )}
-            overdueAmount={
-              duesData?.plans.reduce((sum, p) => sum + (p.overdueAmount || 0), 0) || 0
-            }
-            onPayClick={() => navigate('/app/pay')}
-          />
-        )}
+        ) : (() => {
+          const overduePlansInfo = (duesData?.plans || [])
+            .map((p) => calculatePlanOverdue(p))
+            .filter((info) => info.isOverdue);
+          const hasOverdue = overduePlansInfo.length > 0;
+          const overdueEmiTotal = overduePlansInfo.reduce((sum, info) => sum + info.overdueEmiTotal, 0);
+          const overdueLateFeesTotal = (duesData?.plans || []).reduce((sum, p) => sum + (p.overdueAmount || 0), 0);
+
+          return (
+            <AmountCard
+              totalOutstanding={duesData?.totalOutstanding || 0}
+              nextEmiAmount={hasOverdue ? overdueEmiTotal : (duesData?.nextEmiAmount || 0)}
+              nextEmiDate={duesData?.nextEmiDate || ''}
+              isDueSoon={duesData?.isDueSoon || false}
+              isOverdue={hasOverdue}
+              overdueAmount={overdueLateFeesTotal}
+              onPayClick={() => navigate('/app/pay')}
+            />
+          );
+        })()}
 
         {/* Approved EMI Privilege Card & Borrowing Capacity Widget */}
         {isCardApproved && !loading && (

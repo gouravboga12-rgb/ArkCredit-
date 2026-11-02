@@ -11,6 +11,7 @@ import {
   calculateTotalOutstanding,
   getEarliestNextEmi,
   determineDueStatus,
+  calculatePlanOverdue,
 } from '../core/domain';
 
 // Helper to extract bearer token
@@ -248,8 +249,32 @@ export const handlers = [
     const state = useStore.getState();
 
     const consumer = state.consumers.find((c) => c.id === consumerId);
-    const plans = state.duesPlans.filter((p) => p.consumerId === consumerId && p.status === 'active');
-    const allPlans = state.duesPlans.filter((p) => p.consumerId === consumerId);
+    const rawPlans = state.duesPlans.filter((p) => p.consumerId === consumerId && p.status === 'active');
+    const rawAllPlans = state.duesPlans.filter((p) => p.consumerId === consumerId);
+
+    const plans = rawPlans.map((p) => {
+      const info = calculatePlanOverdue(p);
+      return {
+        ...p,
+        daysOverdue: info.daysOverdue,
+        missedWeeks: info.missedWeeks,
+        isOverdue: info.isOverdue,
+        overdueEmiTotal: info.overdueEmiTotal,
+        mandatoryOverdueAmount: info.mandatoryOverduePayable,
+      };
+    });
+
+    const allPlans = rawAllPlans.map((p) => {
+      const info = calculatePlanOverdue(p);
+      return {
+        ...p,
+        daysOverdue: info.daysOverdue,
+        missedWeeks: info.missedWeeks,
+        isOverdue: info.isOverdue,
+        overdueEmiTotal: info.overdueEmiTotal,
+        mandatoryOverdueAmount: info.mandatoryOverduePayable,
+      };
+    });
 
     const totalOutstanding = calculateTotalOutstanding(plans);
     const nextEmi = getEarliestNextEmi(plans);
@@ -691,7 +716,9 @@ export const handlers = [
     const state = useStore.getState();
     const adminName = state.adminSession?.admin.name || 'Admin';
 
-    const missedWeeksCount = Number(body.missedWeeks || body.missedMonths || 1);
+    const targetPlan = state.duesPlans.find((p) => p.id === id);
+    const calculatedWeeks = targetPlan ? calculatePlanOverdue(targetPlan).missedWeeks : 1;
+    const missedWeeksCount = Number(body.missedWeeks || body.missedMonths || calculatedWeeks);
     const updated = state.setPlanOverdueFee(
       id as string,
       Number(body.overdueAmount || 0),

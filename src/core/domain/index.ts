@@ -50,8 +50,109 @@ export function isPastDate(targetDateStr: string, refDate = new Date()): boolean
   const target = new Date(targetDateStr);
   if (isNaN(target.getTime())) return false;
 
-  const ref = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
-  return target.getTime() < ref.getTime();
+  const targetMidnight = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+  const refMidnight = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate()).getTime();
+  return targetMidnight < refMidnight;
+}
+
+export interface PlanOverdueInfo {
+  isOverdue: boolean;
+  daysOverdue: number;
+  missedWeeks: number;
+  missedPeriods: number;
+  overdueEmiTotal: number;
+  lateFee: number;
+  mandatoryOverduePayable: number;
+  isCapped: boolean;
+}
+
+/**
+ * Accurately calculates overdue metrics based on calendar days elapsed past nextEmiDate.
+ * - Compares calendar day of nextEmiDate with refDate (defaults to today).
+ * - 1-7 days overdue: 1 week missed
+ * - 8-14 days overdue: 2 weeks missed
+ * - 15-21 days overdue: 3 weeks missed
+ * - 22-28 days overdue: 4 weeks missed (e.g. Oct 5 to Nov 2 = 28 days = 4 weeks missed)
+ * - 29+ days overdue: Math.ceil(daysOverdue / 7) weeks missed
+ * - Takes Math.max(calculatedWeeks, plan.missedWeeks || 0) so admin manual overrides are respected.
+ * - Caps missedWeeks at plan.remainingEmis (cannot owe more than remaining loan tenure).
+ * - overdueEmiTotal = min(plan.outstandingAmount, plan.emiAmount * missedWeeks).
+ * - mandatoryOverduePayable = min(plan.outstandingAmount + lateFee, overdueEmiTotal + lateFee).
+ */
+export function calculatePlanOverdue(
+  plan: Partial<DuesPlan> | null | undefined,
+  refDate: Date = new Date()
+): PlanOverdueInfo {
+  const empty: PlanOverdueInfo = {
+    isOverdue: false,
+    daysOverdue: 0,
+    missedWeeks: 0,
+    missedPeriods: 0,
+    overdueEmiTotal: 0,
+    lateFee: 0,
+    mandatoryOverduePayable: 0,
+    isCapped: false,
+  };
+
+  if (!plan || plan.status === 'closed' || (plan.outstandingAmount !== undefined && plan.outstandingAmount <= 0)) {
+    return empty;
+  }
+
+  const lateFee = Math.max(0, Number(plan.overdueAmount) || 0);
+  let daysOverdue = 0;
+  let isPastDue = false;
+
+  if (plan.nextEmiDate) {
+    const dueDate = new Date(plan.nextEmiDate);
+    if (!isNaN(dueDate.getTime())) {
+      const dueMidnight = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime();
+      const refMidnight = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate()).getTime();
+      const diffMs = refMidnight - dueMidnight;
+      if (diffMs > 0) {
+        daysOverdue = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        isPastDue = daysOverdue >= 1;
+      }
+    }
+  }
+
+  const isOverdue = isPastDue || lateFee > 0;
+  if (!isOverdue) {
+    return empty;
+  }
+
+  let calculatedWeeks = 1;
+  if (daysOverdue >= 1) {
+    calculatedWeeks = Math.ceil(daysOverdue / 7);
+  }
+
+  const manualWeeks = Number(plan.missedWeeks) || 0;
+  let missedWeeks = Math.max(calculatedWeeks, manualWeeks);
+
+  const remainingEmis = (plan.remainingEmis !== undefined && plan.remainingEmis > 0)
+    ? plan.remainingEmis
+    : (plan.totalEmis !== undefined && plan.totalEmis > 0 ? plan.totalEmis : 12);
+
+  const isCapped = missedWeeks >= remainingEmis;
+  missedWeeks = Math.min(missedWeeks, remainingEmis);
+  if (missedWeeks < 1) missedWeeks = 1;
+
+  const outstanding = plan.outstandingAmount !== undefined ? plan.outstandingAmount : 0;
+  const regularEmi = (plan.emiAmount !== undefined && plan.emiAmount > 0) ? plan.emiAmount : outstanding;
+  const overdueEmiTotal = outstanding > 0 ? Math.min(outstanding, regularEmi * missedWeeks) : regularEmi * missedWeeks;
+  const mandatoryOverduePayable = outstanding > 0
+    ? Math.min(outstanding + lateFee, overdueEmiTotal + lateFee)
+    : overdueEmiTotal + lateFee;
+
+  return {
+    isOverdue: true,
+    daysOverdue,
+    missedWeeks,
+    missedPeriods: missedWeeks,
+    overdueEmiTotal,
+    lateFee,
+    mandatoryOverduePayable,
+    isCapped,
+  };
 }
 
 /**
@@ -72,7 +173,7 @@ export function determineDueStatus(
   if (activePlans.length === 0) return 'Clear';
 
   const hasOverdue = activePlans.some(
-    (p) => (p.overdueAmount && p.overdueAmount > 0) || isPastDate(p.nextEmiDate, refDate)
+    (p) => calculatePlanOverdue(p, refDate).isOverdue
   );
   if (hasOverdue) return 'Overdue';
 
@@ -86,10 +187,12 @@ export function determineDueStatus(
  * Finds the earliest upcoming EMI details among active plans:
  * Combines EMI amounts if multiple plans are due on the same earliest date.
  */
-export function getEarliestNextEmi(plans: DuesPlan[]): {
+export function getEarliestNextEmi(plans: DuesPlan[], refDate = new Date()): {
   amount: number;
+  overdueEmiTotal: number;
   dueDate: string;
   isDueSoon: boolean;
+  isOverdue: boolean;
   planCount: number;
 } {
   const activePlansWithEmi = plans.filter(
@@ -99,8 +202,10 @@ export function getEarliestNextEmi(plans: DuesPlan[]): {
   if (activePlansWithEmi.length === 0) {
     return {
       amount: 0,
+      overdueEmiTotal: 0,
       dueDate: '',
       isDueSoon: false,
+      isOverdue: false,
       planCount: 0,
     };
   }
@@ -113,11 +218,19 @@ export function getEarliestNextEmi(plans: DuesPlan[]): {
   const earliestDate = sorted[0].nextEmiDate;
   const plansOnEarliestDate = sorted.filter((p) => p.nextEmiDate === earliestDate);
   const combinedAmount = plansOnEarliestDate.reduce((sum, p) => sum + p.emiAmount, 0);
+  const overdueEmiTotal = plansOnEarliestDate.reduce((sum, p) => {
+    const overdue = calculatePlanOverdue(p, refDate);
+    return sum + (overdue.isOverdue ? overdue.overdueEmiTotal : 0);
+  }, 0);
+
+  const isEarliestOverdue = plansOnEarliestDate.some((p) => calculatePlanOverdue(p, refDate).isOverdue);
 
   return {
     amount: combinedAmount,
+    overdueEmiTotal,
     dueDate: earliestDate,
-    isDueSoon: isWithinDays(earliestDate, 7),
+    isDueSoon: !isEarliestOverdue && isWithinDays(earliestDate, 7, refDate),
+    isOverdue: isEarliestOverdue,
     planCount: plansOnEarliestDate.length,
   };
 }
@@ -229,7 +342,8 @@ export function applyPaymentToPlan(
   let newNextEmiDate = plan.nextEmiDate;
 
   if (isEmiPayment || actualPay >= plan.emiAmount) {
-    const weeksPaid = Math.max(1, plan.missedWeeks || plan.missedMonths || 1);
+    const regularEmi = plan.emiAmount > 0 ? plan.emiAmount : 1;
+    const weeksPaid = Math.max(1, Math.min(plan.remainingEmis, Math.floor(actualPay / regularEmi)));
     newRemainingEmis = Math.max(0, plan.remainingEmis - weeksPaid);
     if (newRemainingEmis > 0 && newOutstanding > 0) {
       newNextEmiDate =

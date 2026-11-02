@@ -119,6 +119,10 @@ export interface DuesPlan {
   missedMonths?: number; // Deprecated, kept for backward compatibility
   overdueRemarks?: string; // Admin note for overdue fee
   overdueAssignedAt?: string; // Timestamp when overdue fee was assigned
+  daysOverdue?: number; // Calendar days past nextEmiDate
+  isOverdue?: boolean; // Whether the plan is currently overdue
+  overdueEmiTotal?: number; // Total accumulated missed EMIs (emiAmount * missedWeeks)
+  mandatoryOverdueAmount?: number; // Total minimum mandatory overdue payable (overdueEmiTotal + overdueAmount)
   createdAt: string;
   updatedAt: string;
 }
