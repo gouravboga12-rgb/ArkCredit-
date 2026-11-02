@@ -6,6 +6,8 @@ import { PaymentMode } from '../../core/types';
 
 interface ListRowProps {
   title: string;
+  badgeText?: string;
+  tagText?: string;
   subtitle?: string;
   date: string;
   amount: number;
@@ -18,6 +20,8 @@ interface ListRowProps {
 
 export const ListRow: React.FC<ListRowProps> = ({
   title,
+  badgeText,
+  tagText,
   subtitle,
   date,
   amount,
@@ -70,10 +74,22 @@ export const ListRow: React.FC<ListRowProps> = ({
       <div className="flex items-center gap-3 min-w-0">
         {renderIcon()}
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-white truncate group-hover:text-akr-gold-light transition-colors">
-            {title}
-          </h4>
-          <div className="flex items-center gap-2 text-xs text-akr-text-muted mt-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h4 className="text-sm font-bold text-white truncate group-hover:text-akr-gold-light transition-colors">
+              {title}
+            </h4>
+            {badgeText && (
+              <span className="text-[10px] bg-akr-gold/15 text-akr-gold font-mono font-semibold px-2 py-0.5 rounded border border-akr-gold/30">
+                {badgeText}
+              </span>
+            )}
+            {tagText && (
+              <span className="text-[9px] bg-zinc-800 text-zinc-300 font-medium px-1.5 py-0.5 rounded border border-zinc-700">
+                {tagText}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-akr-text-muted mt-0.5 flex-wrap">
             <span>{formatDisplayDate(date)}</span>
             {mode && (
               <>

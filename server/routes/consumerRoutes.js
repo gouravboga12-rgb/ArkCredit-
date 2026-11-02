@@ -888,12 +888,15 @@ router.post('/razorpay/verify-payment', async (req, res) => {
 
     // 4. Record Payment document in MongoDB
     const paymentId = `pay_${Date.now().toString(36)}`;
+    const matchedPlanForRecord = planId && planId !== 'all' ? await DuesPlan.findOne({ id: planId, consumerId }) : null;
     const payment = await Payment.create({
       id: paymentId,
       transactionRef: razorpay_payment_id,
       consumerId,
       planId: planId || 'plan_all',
       planTypeId,
+      planTitle: matchedPlanForRecord ? matchedPlanForRecord.title : (planId === 'all' ? 'All Active EMI Plans' : planTitle || 'Weekly EMI Repayment'),
+      planReference: matchedPlanForRecord ? matchedPlanForRecord.referenceNumber : '',
       amount: numAmount,
       mode: mode || 'UPI',
       status: 'success',
@@ -1030,8 +1033,47 @@ router.get('/payments', async (req, res) => {
   const consumerId = getConsumerId(req);
   if (!consumerId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const payments = await Payment.find({ consumerId }).sort({ createdAt: -1 });
-  return res.json(payments);
+  const [payments, plans] = await Promise.all([
+    Payment.find({ consumerId }).sort({ createdAt: -1 }).lean(),
+    DuesPlan.find({ consumerId }).lean(),
+  ]);
+
+  const planMap = new Map();
+  plans.forEach(p => {
+    planMap.set(p.id, p);
+  });
+
+  const enrichedPayments = payments.map(p => {
+    const matchedPlan = planMap.get(p.planId);
+    const planTitle = p.planTitle || matchedPlan?.title || (p.planId === 'all' || p.planId === 'plan_all' ? 'All Active EMI Plans' : 'Weekly EMI Repayment');
+    const planReference = p.planReference || matchedPlan?.referenceNumber || '';
+    const emiAmount = matchedPlan?.emiAmount || 0;
+
+    let installmentDescription = '';
+    if (emiAmount > 0 && p.amount > 0) {
+      const weeksCovered = Math.round(p.amount / emiAmount);
+      if (weeksCovered > 1) {
+        installmentDescription = `${weeksCovered} Weekly EMIs Paid`;
+      } else {
+        installmentDescription = '1 Weekly EMI Paid';
+      }
+    } else {
+      installmentDescription = 'Weekly EMI Repayment';
+    }
+
+    return {
+      ...p,
+      planTitle,
+      planReference,
+      productName: matchedPlan?.productName || '',
+      installmentDescription,
+      planRemainingEmis: matchedPlan?.remainingEmis,
+      planTotalEmis: matchedPlan?.totalEmis,
+      planOutstandingAmount: matchedPlan?.outstandingAmount,
+    };
+  });
+
+  return res.json(enrichedPayments);
 });
 
 router.get(['/payments/:id', '/payments/:id(*)'], async (req, res) => {

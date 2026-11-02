@@ -17,7 +17,7 @@ import {
 import { consumerApi } from '../../core/api';
 import { Payment, DuesPlan } from '../../core/types';
 import { formatCurrency, formatDisplayDate, formatMonthHeader } from '../../core/formatters';
-import { PageHeader, ListRow, BottomNav, Skeleton, EmptyState, StatusBadge } from '../../components/ui';
+import { PageHeader, ListRow, BottomNav, Skeleton, EmptyState, StatusBadge, BottomSheet } from '../../components/ui';
 
 export const PaymentHistoryScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -27,6 +27,7 @@ export const PaymentHistoryScreen: React.FC = () => {
     nextEmiAmount: number;
     nextEmiDate: string;
     plans: DuesPlan[];
+    allPlans?: DuesPlan[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,11 +35,15 @@ export const PaymentHistoryScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'history' | 'ledger'>('history');
 
   // Filters
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'emi' | 'card'>('all');
   const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Selected payment for detail modal
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -106,13 +111,27 @@ export const PaymentHistoryScreen: React.FC = () => {
     }
   };
 
-  // Filter payments by Type, Custom Dates, and Search Query
+  // Unique plans list for filtering
+  const consumerPlansList = useMemo(() => {
+    return duesData?.allPlans || duesData?.plans || [];
+  }, [duesData]);
+
+  // Filter payments by Plan, Type, Custom Dates, and Search Query
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
       if (!p) return false;
       const pType = (p.planTypeId || '').toLowerCase();
 
-      // 1. Type filter
+      // 1. Specific Plan Filter
+      if (selectedPlanId !== 'all') {
+        if (selectedPlanId === 'card') {
+          if (!pType.includes('card')) return false;
+        } else if (p.planId !== selectedPlanId) {
+          return false;
+        }
+      }
+
+      // 2. Type filter
       if (typeFilter === 'emi' && !pType.includes('loan') && !pType.includes('emi') && pType.includes('card')) {
         return false;
       }
@@ -120,7 +139,7 @@ export const PaymentHistoryScreen: React.FC = () => {
         return false;
       }
 
-      // 2. Custom Date Range Filter
+      // 3. Custom Date Range Filter
       if (fromDate || toDate) {
         if (!p.createdAt) return false;
         const pDate = p.createdAt.split('T')[0];
@@ -128,20 +147,27 @@ export const PaymentHistoryScreen: React.FC = () => {
         if (toDate && pDate > toDate) return false;
       }
 
-      // 3. Search query
+      // 4. Search query matching UTR, reference, or Plan title
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
+        const matchedPlan = consumerPlansList.find((plan) => plan.id === p.planId);
         const matchRef =
           (p.transactionRef || '').toLowerCase().includes(q) ||
-          (p.reference || '').toLowerCase().includes(q);
+          (p.reference || '').toLowerCase().includes(q) ||
+          (p.planReference || '').toLowerCase().includes(q) ||
+          (matchedPlan?.referenceNumber || '').toLowerCase().includes(q);
+        const matchTitle =
+          (p.planTitle || '').toLowerCase().includes(q) ||
+          (matchedPlan?.title || '').toLowerCase().includes(q) ||
+          (matchedPlan?.productName || '').toLowerCase().includes(q);
         const matchAmount =
           p.amount !== undefined && p.amount !== null ? p.amount.toString().includes(q) : false;
-        if (!matchRef && !matchAmount) return false;
+        if (!matchRef && !matchTitle && !matchAmount) return false;
       }
 
       return true;
     });
-  }, [payments, typeFilter, fromDate, toDate, searchQuery]);
+  }, [payments, selectedPlanId, typeFilter, fromDate, toDate, searchQuery, consumerPlansList]);
 
   // Group by month
   const groupedByMonth = useMemo(() => {
@@ -296,32 +322,94 @@ export const PaymentHistoryScreen: React.FC = () => {
                 )}
               </div>
 
-              {/* Type Filter & Search Bar */}
+              {/* Plan Filter, Type Filter & Search Bar */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="relative">
                   <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value as any)}
-                    className="w-full bg-akr-surface border border-akr-border/80 text-white rounded-xl py-2 px-3 pr-8 text-xs font-semibold focus:border-akr-gold outline-none appearance-none"
+                    value={selectedPlanId !== 'all' ? selectedPlanId : typeFilter}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'all' || val === 'emi' || val === 'card') {
+                        setTypeFilter(val as any);
+                        setSelectedPlanId('all');
+                      } else {
+                        setSelectedPlanId(val);
+                        setTypeFilter('all');
+                      }
+                    }}
+                    className="w-full bg-akr-surface border border-akr-border/80 text-white rounded-xl py-2 px-3 pr-8 text-xs font-semibold focus:border-akr-gold outline-none appearance-none truncate"
                   >
-                    <option value="all">All Payment Types</option>
-                    <option value="emi">Weekly EMI Payments</option>
-                    <option value="card">Card Repayments</option>
+                    <option value="all">All EMI Plans & Payments</option>
+                    {consumerPlansList.length > 0 && (
+                      <optgroup label="Filter by EMI Plan">
+                        {consumerPlansList.map((plan) => (
+                          <option key={plan.id} value={plan.id}>
+                            {plan.title} (Ref: {plan.referenceNumber})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="Payment Categories">
+                      <option value="emi">All Weekly EMIs</option>
+                      <option value="card">Card Repayments</option>
+                    </optgroup>
                   </select>
-                  <Filter className="w-3.5 h-3.5 text-akr-text-muted absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <Filter className="w-3.5 h-3.5 text-akr-gold absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
-                    placeholder="Search UTR, ref, or amount..."
+                    placeholder="Search plan, UTR, ref, or amount..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-8 pr-3 py-2 bg-akr-surface border border-akr-border/80 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:border-akr-gold outline-none"
                   />
                 </div>
               </div>
+
+              {/* Quick EMI Plan Filter Pills */}
+              {consumerPlansList.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPlanId('all');
+                      setTypeFilter('all');
+                    }}
+                    className={`px-2.5 py-1 rounded-full whitespace-nowrap font-semibold border transition-all ${
+                      selectedPlanId === 'all' && typeFilter === 'all'
+                        ? 'bg-akr-gold/20 text-akr-gold border-akr-gold shadow-sm'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    All Plans ({payments.length})
+                  </button>
+                  {consumerPlansList.map((plan) => {
+                    const isSelected = selectedPlanId === plan.id;
+                    const planPayCount = payments.filter((pay) => pay.planId === plan.id).length;
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPlanId(plan.id);
+                          setTypeFilter('all');
+                        }}
+                        className={`px-2.5 py-1 rounded-full whitespace-nowrap font-medium border flex items-center gap-1.5 transition-all ${
+                          isSelected
+                            ? 'bg-akr-gold/20 text-akr-gold border-akr-gold font-bold shadow-sm'
+                            : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        <span>{plan.title}</span>
+                        <span className="font-mono text-[9px] opacity-75">({planPayCount})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Payments Grouped by Month Headers */}
               {loading ? (
@@ -345,18 +433,48 @@ export const PaymentHistoryScreen: React.FC = () => {
 
                       <div className="space-y-2">
                         {groupedByMonth[month].map((p) => {
+                          const matchedPlan =
+                            duesData?.plans?.find((plan) => plan.id === p.planId) ||
+                            duesData?.allPlans?.find((plan) => plan.id === p.planId);
+
                           const isCard = (p.planTypeId || '').toLowerCase().includes('card');
+
+                          // Determine clear plan title so customer immediately recognizes the item
+                          const planTitle =
+                            p.planTitle ||
+                            matchedPlan?.title ||
+                            (p.planId === 'all' || p.planId === 'plan_all'
+                              ? 'Combined EMI Repayment (All Plans)'
+                              : isCard
+                              ? 'Privilege Card Payment'
+                              : 'Weekly EMI Repayment');
+
+                          // Plan reference ID
+                          const planRef = p.planReference || matchedPlan?.referenceNumber || '';
+
+                          // Installment calculation description
+                          const emiAmt = matchedPlan?.emiAmount || 0;
+                          let installmentTag = p.installmentDescription || '';
+                          if (!installmentTag && emiAmt > 0 && p.amount > 0) {
+                            const weeksCovered = Math.round(p.amount / emiAmt);
+                            installmentTag = weeksCovered > 1 ? `${weeksCovered} Wks Paid` : 'Weekly EMI';
+                          } else if (!installmentTag) {
+                            installmentTag = isCard ? 'Card Repayment' : 'Weekly EMI';
+                          }
+
                           return (
                             <ListRow
                               key={p.id}
-                              title={isCard ? 'Card Payment' : 'Weekly EMI Repayment'}
+                              title={planTitle}
+                              badgeText={planRef ? `Ref: ${planRef}` : undefined}
+                              tagText={installmentTag}
                               subtitle={p.reference}
                               date={p.createdAt}
                               amount={p.amount}
                               status={p.status}
                               mode={p.mode}
                               iconType={isCard ? 'card' : 'rupee'}
-                              onClick={() => setActiveTab('ledger')}
+                              onClick={() => setSelectedPayment(p)}
                             />
                           );
                         })}
@@ -573,6 +691,134 @@ export const PaymentHistoryScreen: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Bottom Sheet for Payment Transaction Details & Credited Plan Allocation */}
+      {selectedPayment && (
+        <BottomSheet
+          isOpen={!!selectedPayment}
+          onClose={() => setSelectedPayment(null)}
+          title="Payment Details & Allocation"
+        >
+          {(() => {
+            const matchedPlan =
+              duesData?.plans?.find((p) => p.id === selectedPayment.planId) ||
+              duesData?.allPlans?.find((p) => p.id === selectedPayment.planId);
+            const isCard = (selectedPayment.planTypeId || '').toLowerCase().includes('card');
+            const planTitle =
+              selectedPayment.planTitle ||
+              matchedPlan?.title ||
+              (selectedPayment.planId === 'all' || selectedPayment.planId === 'plan_all'
+                ? 'Combined EMI Repayment (All Plans)'
+                : isCard
+                ? 'Privilege Card Payment'
+                : 'Weekly EMI Repayment');
+            const planRef = selectedPayment.planReference || matchedPlan?.referenceNumber || '-';
+
+            return (
+              <div className="space-y-4 pt-1 text-left text-xs">
+                {/* Header card with status */}
+                <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 text-center space-y-1">
+                  <div className="w-10 h-10 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-1">
+                    <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 block">
+                    Payment Successful
+                  </span>
+                  <div className="text-2xl font-black text-white font-sans">
+                    {formatCurrency(selectedPayment.amount)}
+                  </div>
+                  <span className="text-[11px] text-zinc-400 font-mono block">
+                    {formatDisplayDate(selectedPayment.createdAt)}
+                  </span>
+                </div>
+
+                {/* Allocated Plan Details Box */}
+                <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2.5">
+                  <span className="text-[10px] font-bold text-akr-gold uppercase tracking-wider block">
+                    Credited EMI Plan Details
+                  </span>
+
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-zinc-400">Financed Item / Plan:</span>
+                    <span className="font-bold text-white text-right max-w-[60%] truncate">
+                      {planTitle}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-zinc-400">Loan Reference:</span>
+                    <span className="font-mono font-bold text-akr-gold text-right">
+                      {planRef}
+                    </span>
+                  </div>
+
+                  {selectedPayment.installmentDescription && (
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-zinc-400">Tenure Coverage:</span>
+                      <span className="font-semibold text-emerald-400">
+                        {selectedPayment.installmentDescription}
+                      </span>
+                    </div>
+                  )}
+
+                  {matchedPlan && (
+                    <>
+                      <div className="pt-2 border-t border-zinc-800/80 flex justify-between items-center text-xs">
+                        <span className="text-zinc-400">Current Balance Remaining:</span>
+                        <span className="font-bold text-akr-gold">
+                          {formatCurrency(matchedPlan.outstandingAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-zinc-400">Repayment Progress:</span>
+                        <span className="text-zinc-300">
+                          {matchedPlan.totalEmis - matchedPlan.remainingEmis} of {matchedPlan.totalEmis} Weeks Paid
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Transaction Proof Details */}
+                <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-2 text-xs">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                    Transaction Record
+                  </span>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400">Payment Mode:</span>
+                    <span className="font-mono uppercase bg-zinc-800 px-2 py-0.5 rounded text-[11px] text-white">
+                      {selectedPayment.mode || 'UPI'}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400">Payment Gateway Ref:</span>
+                    <span className="font-mono text-zinc-300 text-[11px] truncate max-w-[60%]">
+                      {selectedPayment.reference || selectedPayment.transactionRef}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action CTA */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPayment(null);
+                      setActiveTab('ledger');
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-akr-surface border border-akr-gold/50 text-akr-gold hover:bg-akr-gold hover:text-black font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>View Complete Repayment Ledger</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </BottomSheet>
+      )}
 
       <BottomNav />
     </div>

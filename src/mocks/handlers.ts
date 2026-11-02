@@ -339,8 +339,22 @@ export const handlers = [
     const consumerId = token.replace('mock_consumer_token_', '');
     const state = useStore.getState();
     const payments = state.payments.filter((p) => p.consumerId === consumerId);
+    const plans = state.duesPlans.filter((p) => p.consumerId === consumerId);
 
-    return HttpResponse.json(payments);
+    const enriched = payments.map((p) => {
+      const plan = plans.find((pl) => pl.id === p.planId);
+      return {
+        ...p,
+        planTitle: p.planTitle || plan?.title || (p.planId === 'all' ? 'All Active EMI Plans' : 'Weekly EMI Repayment'),
+        planReference: p.planReference || plan?.referenceNumber || '',
+        productName: plan?.productName || '',
+        planRemainingEmis: plan?.remainingEmis,
+        planTotalEmis: plan?.totalEmis,
+        planOutstandingAmount: plan?.outstandingAmount,
+      };
+    });
+
+    return HttpResponse.json(enriched);
   }),
 
   http.get('/api/consumer/cards', async ({ request }) => {

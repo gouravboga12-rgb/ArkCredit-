@@ -413,6 +413,7 @@ router.get('/payments', async (req, res) => {
         consumerName: consumer?.name || 'Consumer',
         consumerAccount: consumer?.accountNumber || '-',
         planTitle: plan?.title || '-',
+        planReference: plan?.referenceNumber || '',
         planTypeName: (plan && ptMap.get(plan.planTypeId)) || 'Retail Purchase',
       };
     });
@@ -431,9 +432,15 @@ router.post('/payments/offline', async (req, res) => {
     const txnRef = `TXN-AKR-${Date.now().toString().slice(-8)}`;
 
     let planTypeId = 'pt_loan_emi';
+    let planTitle = 'Weekly EMI Repayment';
+    let planReference = '';
     if (planId) {
       const p = await DuesPlan.findOne({ id: planId });
-      if (p) planTypeId = p.planTypeId || 'pt_loan_emi';
+      if (p) {
+        planTypeId = p.planTypeId || 'pt_loan_emi';
+        planTitle = p.title || 'Weekly EMI Repayment';
+        planReference = p.referenceNumber || '';
+      }
     }
 
     const payment = await Payment.create({
@@ -442,6 +449,8 @@ router.post('/payments/offline', async (req, res) => {
       consumerId,
       planId,
       planTypeId,
+      planTitle,
+      planReference,
       amount: Number(amount),
       mode: mode || 'CASH',
       status: 'success',

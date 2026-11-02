@@ -718,19 +718,29 @@ export const HomeScreen: React.FC = () => {
             </div>
           ) : recentPayments.length > 0 ? (
             <div className="space-y-2">
-              {recentPayments.map((pay) => (
-                <ListRow
-                  key={pay.id}
-                  title={(pay?.planTypeId || '').toLowerCase().includes('card') ? 'Card Payment' : 'EMI Payment'}
-                  subtitle={pay.reference}
-                  date={pay.createdAt}
-                  amount={pay.amount}
-                  status={pay.status}
-                  mode={pay.mode}
-                  iconType="check"
-                  onClick={() => navigate('/app/history')}
-                />
-              ))}
+              {recentPayments.map((pay) => {
+                const matchedPlan = duesData?.plans?.find((p) => p.id === pay.planId);
+                const title =
+                  pay.planTitle ||
+                  matchedPlan?.title ||
+                  ((pay?.planTypeId || '').toLowerCase().includes('card') ? 'Card Payment' : 'EMI Payment');
+                const planRef = pay.planReference || matchedPlan?.referenceNumber;
+
+                return (
+                  <ListRow
+                    key={pay.id}
+                    title={title}
+                    badgeText={planRef ? `Ref: ${planRef}` : undefined}
+                    subtitle={pay.reference}
+                    date={pay.createdAt}
+                    amount={pay.amount}
+                    status={pay.status}
+                    mode={pay.mode}
+                    iconType="check"
+                    onClick={() => navigate('/app/history')}
+                  />
+                );
+              })}
             </div>
           ) : (
             <div className="p-6 rounded-card bg-akr-surface text-center text-xs text-zinc-400">

@@ -142,6 +142,12 @@ export interface Payment {
   consumerName?: string;
   consumerAccountNumber?: string;
   planTitle?: string;
+  planReference?: string;
+  productName?: string;
+  installmentDescription?: string;
+  planRemainingEmis?: number;
+  planTotalEmis?: number;
+  planOutstandingAmount?: number;
 }
 
 export interface CardType {
