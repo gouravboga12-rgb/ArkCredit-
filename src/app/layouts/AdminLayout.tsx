@@ -44,12 +44,6 @@ export const AdminLayout: React.FC = () => {
       superOnly: false,
     },
     {
-      label: 'Registered Users',
-      path: '/admin/users',
-      icon: UserCheck,
-      superOnly: false,
-    },
-    {
       label: 'Consumers',
       path: '/admin/consumers',
       icon: Users,
@@ -87,6 +81,12 @@ export const AdminLayout: React.FC = () => {
       superOnly: false,
     },
     {
+      label: 'Registered Users',
+      path: '/admin/users',
+      icon: UserCheck,
+      superOnly: false,
+    },
+    {
       label: 'Activity Log',
       path: '/admin/activity-log',
       icon: ShieldCheck,
@@ -97,7 +97,7 @@ export const AdminLayout: React.FC = () => {
   // Selected quick nav items for mobile/tablet bottom bar
   const quickNavItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Users', path: '/admin/users', icon: UserCheck },
+    { label: 'Consumers', path: '/admin/consumers', icon: Users },
     { label: 'Dues', path: '/admin/dues', icon: IndianRupee },
     { label: 'Requests', path: '/admin/card-requests', icon: FileText, badge: pendingRequestsCount },
   ];

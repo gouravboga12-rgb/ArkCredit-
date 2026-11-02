@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -32,6 +33,7 @@ import {
   ArrowUpCircle,
   AlertTriangle,
   TrendingUp,
+  UserCheck,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
@@ -55,6 +57,7 @@ import {
 import { EmiTenureCalculator, EmiCalculationResult } from '../../../components/admin/EmiTenureCalculator';
 
 export const ConsumerManagementScreen: React.FC = () => {
+  const navigate = useNavigate();
   const [consumers, setConsumers] = useState<any[]>([]);
   const [planTypes, setPlanTypes] = useState<PlanType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -731,13 +734,22 @@ export const ConsumerManagementScreen: React.FC = () => {
       {/* Top Header & Add Consumer Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-serif font-bold text-white tracking-wide">
               Consumer Portfolio Directory
             </h1>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               Card Approved Only
             </span>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/users')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#18181D] hover:bg-[#22222A] text-zinc-300 hover:text-akr-gold border border-zinc-800 hover:border-akr-gold/40 transition-all cursor-pointer shadow-sm"
+              title="View all registered users and onboarding status"
+            >
+              <UserCheck className="w-3.5 h-3.5 text-akr-gold" />
+              <span>Registered Users</span>
+            </button>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
             Displaying consumers with approved EMI Cards. Manage credentials, view active EMIs, and track credit limits.

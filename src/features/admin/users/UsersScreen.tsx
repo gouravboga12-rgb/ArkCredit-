@@ -146,13 +146,22 @@ export const UsersScreen: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-serif font-bold text-white tracking-wide">
               Registered Users & Onboarding
             </h1>
             <span className="text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full bg-akr-gold/15 text-akr-gold border border-akr-gold/30">
               Directory
             </span>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/consumers')}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#18181D] hover:bg-[#22222A] text-zinc-300 hover:text-akr-gold border border-zinc-800 hover:border-akr-gold/40 transition-all cursor-pointer shadow-sm"
+              title="View approved cardholder consumers portfolio"
+            >
+              <Users className="w-3.5 h-3.5 text-akr-gold" />
+              <span>Approved Consumers</span>
+            </button>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
             View all consumer registrations, monitor EMI card application status, and send instant in-app activation requests.
