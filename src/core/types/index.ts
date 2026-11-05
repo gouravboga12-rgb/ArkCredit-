@@ -44,7 +44,7 @@ export interface Consumer {
   createdAt: string;
   cardApproved?: boolean; // Only approved users appear in admin consumers page
   creditLimit?: number; // Credit limit assigned by admin e.g. 50000
-  cardStatus?: 'not_applied' | 'pending' | 'approved' | 'rejected';
+  cardStatus?: 'not_applied' | 'pending' | 'approved' | 'rejected' | 'suspended';
   cardNumber?: string; // Formatted masked card number e.g. '5123 •••• •••• 8842'
   totalOutstanding?: number; // Computed active dues
   availableCredit?: number; // Computed borrowing capacity: creditLimit - totalOutstanding
@@ -224,7 +224,7 @@ export interface PaymentResult {
   payments: Payment[];
 }
 
-export type CardRequestStatus = 'pending' | 'approved' | 'rejected';
+export type CardRequestStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export interface CardRequest {
   id: string;

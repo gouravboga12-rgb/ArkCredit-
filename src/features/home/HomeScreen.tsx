@@ -83,14 +83,21 @@ export const HomeScreen: React.FC = () => {
 
   const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
 
+  const isCardSuspended =
+    consumer?.cardStatus === 'suspended' ||
+    userCardRequest?.status === 'suspended' ||
+    myCardRequests.some((r) => r.status === 'suspended');
+
   const isCardApproved =
-    consumer?.cardApproved === true ||
-    consumer?.cardStatus === 'approved' ||
-    approvedCardRequest !== null ||
-    userCardRequest?.status === 'approved';
+    !isCardSuspended &&
+    (consumer?.cardApproved === true ||
+      consumer?.cardStatus === 'approved' ||
+      approvedCardRequest !== null ||
+      userCardRequest?.status === 'approved');
 
   const isCardPending =
     !isCardApproved &&
+    !isCardSuspended &&
     (consumer?.cardStatus === 'pending' ||
       pendingCardRequest !== null ||
       userCardRequest?.status === 'pending' ||
@@ -266,6 +273,7 @@ export const HomeScreen: React.FC = () => {
 
   // If approved card request exists, but consumer profile is not yet approved in store, reconcile immediately
   useEffect(() => {
+    if (consumer?.cardStatus === 'suspended') return;
     if (approvedCardRequest && consumer) {
       if (!consumer.cardApproved || !consumer.creditLimit) {
         const targetLimit = approvedCardRequest?.creditLimitApproved || 50000;
@@ -375,6 +383,30 @@ export const HomeScreen: React.FC = () => {
             />
           );
         })()}
+
+        {/* Suspended Privilege Card Widget */}
+        {isCardSuspended && !loading && (
+          <div
+            onClick={() => navigate('/app/cards')}
+            className="rounded-2xl p-4 bg-gradient-to-r from-[#201111] via-[#2A1515] to-[#201111] border border-amber-500/40 shadow-md cursor-pointer hover:border-amber-500 transition-all text-left"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <CreditCard className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-white tracking-wide">AKR EMI Privilege Card</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                Card Suspended
+              </span>
+            </div>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Your Privilege Card is temporarily suspended by store administration. New EMI financing plans cannot be assigned. Tap to view card details.
+            </p>
+          </div>
+        )}
 
         {/* Approved EMI Privilege Card & Borrowing Capacity Widget */}
         {isCardApproved && !loading && (

@@ -236,6 +236,13 @@ router.post(['/plans', '/dues'], async (req, res) => {
       return res.status(404).json({ error: 'Customer not found.' });
     }
 
+    if (consumer.cardStatus === 'suspended') {
+      return res.status(400).json({
+        error: `Customer Privilege Card is currently SUSPENDED! New EMI plans cannot be assigned to ${consumer.name || 'this customer'} while their card is suspended. Please reactivate their card under Privilege Card Requests before proceeding.`,
+        cardStatus: 'suspended',
+      });
+    }
+
     const creditLimit = Number(consumer.creditLimit) || 0;
     const activePlans = await DuesPlan.find({ consumerId, status: 'active' });
     const currentOutstanding = activePlans.reduce((sum, p) => sum + (Number(p.outstandingAmount) || 0), 0);
@@ -639,9 +646,32 @@ router.put('/card-requests/:id/status', async (req, res) => {
         await AppNotification.create({
           id: `notif_${Date.now().toString(36)}`,
           consumerId: matchedConsumer.id,
-          title: 'EMI Privilege Card Approved & Dispatched!',
-          message: `Congratulations! Your AKR EMI Privilege Card application (Ref: ${updated.referenceNumber}) has been approved with a credit limit of ₹${assignedLimit.toLocaleString('en-IN')}. Your card is now active for in-store purchases!`,
+          title: 'EMI Privilege Card Active!',
+          message: `Your AKR EMI Privilege Card application (Ref: ${updated.referenceNumber}) is active with a credit limit of ₹${assignedLimit.toLocaleString('en-IN')}. Card is ready for in-store purchases and EMI assignments!`,
           type: 'general',
+          read: false,
+        });
+      }
+    } else if (status === 'suspended' && updated) {
+      const consumerFilter = updated.consumerId
+        ? { id: updated.consumerId }
+        : { $or: [{ mobile: updated.phone }, { email: updated.email }] };
+
+      await Consumer.updateOne(consumerFilter, {
+        $set: {
+          cardApproved: false,
+          cardStatus: 'suspended',
+        },
+      });
+
+      const matchedConsumer = await Consumer.findOne(consumerFilter);
+      if (matchedConsumer) {
+        await AppNotification.create({
+          id: `notif_${Date.now().toString(36)}`,
+          consumerId: matchedConsumer.id,
+          title: 'Privilege Card Temporarily Suspended',
+          message: `Your AKR EMI Privilege Card (Ref: ${updated.referenceNumber}) has been temporarily suspended by store administration. Remarks: ${remarks || 'Suspended by admin review.'}. New EMI assignments are blocked until reactivated.`,
+          type: 'alert',
           read: false,
         });
       }

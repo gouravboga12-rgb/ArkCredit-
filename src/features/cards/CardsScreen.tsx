@@ -207,15 +207,22 @@ export const CardsScreen: React.FC = () => {
 
   const userCardRequest = approvedCardRequest || pendingCardRequest || userCardRequests[0] || null;
 
+  const isSuspended =
+    consumer?.cardStatus === 'suspended' ||
+    userCardRequest?.status === 'suspended' ||
+    myCardRequests.some((r) => r.status === 'suspended');
+
   // Card Approval State
   const isApproved =
-    consumer?.cardApproved === true ||
-    consumer?.cardStatus === 'approved' ||
-    approvedCardRequest !== null ||
-    userCardRequest?.status === 'approved';
+    !isSuspended &&
+    (consumer?.cardApproved === true ||
+      consumer?.cardStatus === 'approved' ||
+      approvedCardRequest !== null ||
+      userCardRequest?.status === 'approved');
 
   const isPending =
     !isApproved &&
+    !isSuspended &&
     (consumer?.cardStatus === 'pending' ||
       pendingCardRequest !== null ||
       userCardRequest?.status === 'pending' ||
@@ -276,6 +283,7 @@ export const CardsScreen: React.FC = () => {
   };
 
   useEffect(() => {
+    if (consumer?.cardStatus === 'suspended') return;
     if (approvedCardRequest && consumer) {
       if (!consumer.cardApproved || !consumer.creditLimit) {
         const targetLimit = approvedCardRequest?.creditLimitApproved || 50000;
@@ -363,7 +371,12 @@ export const CardsScreen: React.FC = () => {
 
                   <div className="flex items-center gap-2">
                     {/* Status Pill on Card */}
-                    {isApproved ? (
+                    {isSuspended ? (
+                      <span className="flex items-center gap-1.5 text-[8.5px] sm:text-[9.5px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm backdrop-blur-md">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        SUSPENDED
+                      </span>
+                    ) : isApproved ? (
                       <span className="flex items-center gap-1.5 text-[8.5px] sm:text-[9.5px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm backdrop-blur-md">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         ACTIVE
@@ -412,7 +425,17 @@ export const CardsScreen: React.FC = () => {
                 </div>
 
                 {/* Card Bottom: Integrated Dashboard Panel on the face of the card */}
-                {isApproved ? (
+                {isSuspended ? (
+                  <div className="relative z-10 rounded-xl p-2.5 sm:p-3 bg-black/80 backdrop-blur-md border border-amber-500/50 shadow-inner text-left">
+                    <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Card Temporarily Suspended</span>
+                    </div>
+                    <p className="text-[9px] sm:text-[10px] text-zinc-300 mt-0.5">
+                      New EMI purchases are paused by administration. Existing dues remain payable.
+                    </p>
+                  </div>
+                ) : isApproved ? (
                   <div className="relative z-10 rounded-xl p-2.5 sm:p-3 bg-black/65 backdrop-blur-md border border-akr-gold/40 shadow-inner">
                     <div className="grid grid-cols-3 gap-2 items-center">
                       {/* Credit Limit */}

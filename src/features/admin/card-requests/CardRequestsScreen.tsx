@@ -24,6 +24,8 @@ import {
   X,
   ChevronDown,
   RefreshCw,
+  Ban,
+  ShieldAlert,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { CardRequest, CardRequestStatus } from '../../../core/types';
@@ -47,11 +49,16 @@ export const CardRequestsScreen: React.FC = () => {
   const [viewingRequest, setViewingRequest] = useState<CardRequest | null>(null);
   const [approvingRequest, setApprovingRequest] = useState<CardRequest | null>(null);
   const [rejectingRequest, setRejectingRequest] = useState<CardRequest | null>(null);
+  const [suspendingRequest, setSuspendingRequest] = useState<CardRequest | null>(null);
+  const [reactivatingRequest, setReactivatingRequest] = useState<CardRequest | null>(null);
   const [previewDocUrl, setPreviewDocUrl] = useState<{ name: string; url: string } | null>(null);
 
-  // Approval Form
+  // Approval / Suspend / Reactivate Forms
   const [creditLimit, setCreditLimit] = useState<number>(50000);
   const [adminRemarks, setAdminRemarks] = useState<string>('');
+  const [suspendReason, setSuspendReason] = useState<string>('');
+  const [reactivateLimit, setReactivateLimit] = useState<number>(50000);
+  const [reactivateRemarks, setReactivateRemarks] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Feedback Toast
@@ -162,9 +169,10 @@ export const CardRequestsScreen: React.FC = () => {
     const total = requests.length;
     const pending = requests.filter((r) => r.status === 'pending').length;
     const approved = requests.filter((r) => r.status === 'approved').length;
+    const suspended = requests.filter((r) => r.status === 'suspended').length;
     const rejected = requests.filter((r) => r.status === 'rejected').length;
     const todayCount = requests.filter((r) => formatDateOnlyIST(r.createdAt) === todayIST).length;
-    return { total, pending, approved, rejected, todayCount };
+    return { total, pending, approved, suspended, rejected, todayCount };
   }, [requests, todayIST]);
 
   const handleApprove = async () => {
@@ -183,6 +191,48 @@ export const CardRequestsScreen: React.FC = () => {
       await loadRequests();
     } catch (err: any) {
       alert(err.message || 'Error updating status');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSuspend = async () => {
+    if (!suspendingRequest) return;
+    try {
+      setIsProcessing(true);
+      await adminApi.updateCardRequestStatus(suspendingRequest.id, {
+        status: 'suspended',
+        remarks: suspendReason.trim() || 'Privilege Card suspended by store administration. New EMI plans blocked.',
+      });
+
+      showToast(`Privilege Card for ${suspendingRequest.fullName} has been SUSPENDED.`);
+      setSuspendingRequest(null);
+      setSuspendReason('');
+      await loadRequests();
+    } catch (err: any) {
+      alert(err.message || 'Error suspending card');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!reactivatingRequest) return;
+    try {
+      setIsProcessing(true);
+      const targetLimit = reactivateLimit || reactivatingRequest.creditLimitApproved || 50000;
+      await adminApi.updateCardRequestStatus(reactivatingRequest.id, {
+        status: 'approved',
+        remarks: reactivateRemarks.trim() || 'Privilege Card reactivated. Credit line restored.',
+        creditLimit: targetLimit,
+      });
+
+      showToast(`Privilege Card for ${reactivatingRequest.fullName} REACTIVATED with ₹${targetLimit.toLocaleString('en-IN')} limit!`);
+      setReactivatingRequest(null);
+      setReactivateRemarks('');
+      await loadRequests();
+    } catch (err: any) {
+      alert(err.message || 'Error reactivating card');
     } finally {
       setIsProcessing(false);
     }
@@ -308,7 +358,7 @@ export const CardRequestsScreen: React.FC = () => {
       </div>
 
       {/* Metric Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-3.5 rounded-xl bg-[#141418] border border-zinc-800 text-left">
           <span className="text-[10px] uppercase font-bold text-zinc-400 block">Total Requests</span>
           <span className="text-xl font-bold text-white mt-1 block">{stats.total}</span>
@@ -330,7 +380,16 @@ export const CardRequestsScreen: React.FC = () => {
             <span>Approved & Issued</span>
           </span>
           <span className="text-xl font-bold text-emerald-300 mt-1 block">{stats.approved}</span>
-          <span className="text-[10px] text-emerald-500/80">Cards initiated</span>
+          <span className="text-[10px] text-emerald-500/80">Active credit lines</span>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-[#1F1810] border border-amber-600/40 text-left">
+          <span className="text-[10px] uppercase font-bold text-amber-400 block flex items-center gap-1">
+            <Ban className="w-3 h-3" />
+            <span>Card Suspended</span>
+          </span>
+          <span className="text-xl font-bold text-amber-300 mt-1 block">{stats.suspended}</span>
+          <span className="text-[10px] text-amber-500/80">New EMIs blocked</span>
         </div>
 
         <div className="p-3.5 rounded-xl bg-[#181212] border border-red-500/30 text-left">
@@ -457,6 +516,7 @@ export const CardRequestsScreen: React.FC = () => {
               <option value="all">All Request Statuses ({requests.length})</option>
               <option value="pending">Pending Review ({stats.pending})</option>
               <option value="approved">Approved & Initiated ({stats.approved})</option>
+              <option value="suspended">Suspended Cards ({stats.suspended})</option>
               <option value="rejected">Rejected ({stats.rejected})</option>
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -514,6 +574,7 @@ export const CardRequestsScreen: React.FC = () => {
                 {filteredRequests.map((r) => {
                   const isPending = r.status === 'pending';
                   const isApproved = r.status === 'approved';
+                  const isSuspended = r.status === 'suspended';
                   const isRejected = r.status === 'rejected';
 
                   return (
@@ -617,6 +678,17 @@ export const CardRequestsScreen: React.FC = () => {
                             )}
                           </div>
                         )}
+                        {isSuspended && (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-amber-400 uppercase bg-amber-500/15 px-2.5 py-0.5 rounded-full border border-amber-500/40">
+                              <Ban className="w-3 h-3 text-amber-400" />
+                              <span>Suspended</span>
+                            </span>
+                            <span className="block text-[10px] text-zinc-500 mt-0.5 font-mono">
+                              New EMIs blocked
+                            </span>
+                          </div>
+                        )}
                         {isRejected && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider text-red-400 uppercase bg-red-500/10 px-2.5 py-0.5 rounded-full border border-red-500/30">
                             <XCircle className="w-3 h-3" />
@@ -637,6 +709,37 @@ export const CardRequestsScreen: React.FC = () => {
                             <Eye className="w-3.5 h-3.5" />
                             <span>View</span>
                           </button>
+
+                          {isApproved && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSuspendingRequest(r);
+                                setSuspendReason('Customer card temporarily suspended by administration. New EMI plans blocked.');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-semibold transition-all flex items-center gap-1 shadow-sm"
+                              title="Suspend Privilege Card (Block New EMIs)"
+                            >
+                              <Ban className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Suspend</span>
+                            </button>
+                          )}
+
+                          {isSuspended && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReactivatingRequest(r);
+                                setReactivateLimit(r.creditLimitApproved || 50000);
+                                setReactivateRemarks('Privilege Card reactivated. Credit line restored.');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold transition-all flex items-center gap-1 shadow-sm"
+                              title="Reactivate Privilege Card"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Reactivate</span>
+                            </button>
+                          )}
 
                           {isPending && (
                             <>
@@ -682,6 +785,7 @@ export const CardRequestsScreen: React.FC = () => {
             {filteredRequests.map((r) => {
               const isPending = r.status === 'pending';
               const isApproved = r.status === 'approved';
+              const isSuspended = r.status === 'suspended';
               const isRejected = r.status === 'rejected';
 
               return (
@@ -713,6 +817,12 @@ export const CardRequestsScreen: React.FC = () => {
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
                           <CheckCircle className="w-3 h-3" />
                           <span>Approved</span>
+                        </span>
+                      )}
+                      {isSuspended && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider text-amber-400 uppercase bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/40">
+                          <Ban className="w-3 h-3 text-amber-400" />
+                          <span>Suspended</span>
                         </span>
                       )}
                       {isRejected && (
@@ -790,6 +900,35 @@ export const CardRequestsScreen: React.FC = () => {
                       <Eye className="w-3.5 h-3.5" />
                       <span>Details</span>
                     </button>
+
+                    {isApproved && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSuspendingRequest(r);
+                          setSuspendReason('Customer card temporarily suspended by administration. New EMI plans blocked.');
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center gap-1"
+                      >
+                        <Ban className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Suspend</span>
+                      </button>
+                    )}
+
+                    {isSuspended && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReactivatingRequest(r);
+                          setReactivateLimit(r.creditLimitApproved || 50000);
+                          setReactivateRemarks('Privilege Card reactivated. Credit line restored.');
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Reactivate</span>
+                      </button>
+                    )}
 
                     {isPending && (
                       <>
@@ -1112,6 +1251,138 @@ export const CardRequestsScreen: React.FC = () => {
                 className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-colors disabled:opacity-50"
               >
                 {isProcessing ? 'Processing...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Suspend Card Modal */}
+      {suspendingRequest && (
+        <Modal
+          isOpen={!!suspendingRequest}
+          onClose={() => setSuspendingRequest(null)}
+          title={`Suspend Privilege Card: ${suspendingRequest.referenceNumber}`}
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-left text-xs">
+            <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-600/50 text-amber-200 space-y-1">
+              <div className="flex items-center gap-2">
+                <Ban className="w-4 h-4 text-amber-400" />
+                <h4 className="font-bold text-white text-sm">
+                  Suspend Privilege Card for {suspendingRequest.fullName}
+                </h4>
+              </div>
+              <p className="text-[11px] text-zinc-300">
+                Contact: <span className="font-mono text-white">{suspendingRequest.phone}</span> • Card: <span className="text-akr-gold font-semibold">{suspendingRequest.cardTypeName}</span>
+              </p>
+              <div className="p-2.5 rounded-lg bg-black/40 border border-amber-500/30 text-amber-300 text-[11px] mt-2 leading-relaxed">
+                <strong>Enforcement Effect:</strong> Suspending this card immediately locks the customer's credit facility. The customer <strong>CANNOT</strong> be assigned any new EMI plans in the admin panel until the card is reactivated. Existing dues remain recorded.
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
+                Reason for Suspension *
+              </label>
+              <textarea
+                value={suspendReason}
+                onChange={(e) => setSuspendReason(e.target.value)}
+                rows={3}
+                placeholder="e.g. Delinquent overdue payments, customer request, or administrative security hold."
+                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-amber-500 resize-none"
+                required
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setSuspendingRequest(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold cursor-pointer hover:bg-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSuspend}
+                disabled={isProcessing}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                <span>{isProcessing ? 'Suspending...' : 'Confirm Suspend Card'}</span>
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Reactivate Card Modal */}
+      {reactivatingRequest && (
+        <Modal
+          isOpen={!!reactivatingRequest}
+          onClose={() => setReactivatingRequest(null)}
+          title={`Reactivate Privilege Card: ${reactivatingRequest.referenceNumber}`}
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-left text-xs">
+            <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-600/50 text-emerald-200 space-y-1">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <h4 className="font-bold text-white text-sm">
+                  Reactivate Privilege Card for {reactivatingRequest.fullName}
+                </h4>
+              </div>
+              <p className="text-[11px] text-zinc-300">
+                Contact: <span className="font-mono text-white">{reactivatingRequest.phone}</span> • Card: <span className="text-akr-gold font-semibold">{reactivatingRequest.cardTypeName}</span>
+              </p>
+              <p className="text-[11px] text-emerald-300/90 pt-1">
+                Reactivating this card will restore borrowing privileges and allow new EMI plans to be assigned immediately.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
+                Approved Credit Limit (₹)
+              </label>
+              <input
+                type="number"
+                value={reactivateLimit}
+                onChange={(e) => setReactivateLimit(Number(e.target.value))}
+                placeholder="50000"
+                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-xs outline-none focus:border-akr-gold font-mono font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
+                Reactivation Remarks
+              </label>
+              <textarea
+                value={reactivateRemarks}
+                onChange={(e) => setReactivateRemarks(e.target.value)}
+                rows={2}
+                placeholder="e.g. Account cleared and verified. Credit line restored."
+                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setReactivatingRequest(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold cursor-pointer hover:bg-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReactivate}
+                disabled={isProcessing}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>{isProcessing ? 'Reactivating...' : 'Confirm Reactivate Card'}</span>
               </button>
             </div>
           </div>

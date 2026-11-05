@@ -34,6 +34,7 @@ import {
   AlertTriangle,
   TrendingUp,
   UserCheck,
+  Ban,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
@@ -335,6 +336,12 @@ export const ConsumerManagementScreen: React.FC = () => {
 
   // Open the Add EMI / Dues Plan Modal for a specific consumer
   const openAddDues = (c: any) => {
+    if (c.cardStatus === 'suspended') {
+      alert(
+        `Privilege Card for ${c.name} is currently SUSPENDED!\n\nNew EMI plans cannot be assigned while this customer's card is suspended. Please go to Privilege Card Requests to reactivate the card first.`
+      );
+      return;
+    }
     setTargetConsumerForDues(c);
     setEditingDuesPlan(null);
     setDuesFormError(null);
@@ -545,6 +552,14 @@ export const ConsumerManagementScreen: React.FC = () => {
     try {
       setDuesFormError(null);
       const principal = Number(data.principal) || 0;
+
+      // Card suspension check
+      if (!editingDuesPlan && targetConsumerForDues.cardStatus === 'suspended') {
+        setDuesFormError(
+          `Customer Privilege Card is currently SUSPENDED! New EMI plans cannot be assigned to ${targetConsumerForDues.name} while their card is suspended. Please reactivate their card under Privilege Card Requests before proceeding.`
+        );
+        return;
+      }
 
       // Real-time credit limit enforcement
       const consumerLimit = Number(targetConsumerForDues.creditLimit) || 0;
@@ -935,7 +950,14 @@ export const ConsumerManagementScreen: React.FC = () => {
                           {c.name.charAt(0)}
                         </div>
                         <div>
-                          <span>{c.name}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span>{c.name}</span>
+                            {c.cardStatus === 'suspended' && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                Suspended
+                              </span>
+                            )}
+                          </div>
                           {c.status === 'inactive' && (
                             <span className="block text-[10px] text-zinc-500 font-normal">Inactive</span>
                           )}
@@ -1071,15 +1093,25 @@ export const ConsumerManagementScreen: React.FC = () => {
                         >
                           {c.activePlansCount} {c.activePlansCount === 1 ? 'plan' : 'plans'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => openAddDues(c)}
-                          className="px-2 py-0.5 rounded bg-akr-gold/15 text-akr-gold hover:bg-akr-gold/30 border border-akr-gold/40 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
-                          title="Add an EMI or Loan plan to this consumer"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>+ Add EMI</span>
-                        </button>
+                        {c.cardStatus === 'suspended' ? (
+                          <span
+                            className="px-2 py-0.5 rounded bg-zinc-800/80 border border-zinc-700 text-amber-400 text-[10px] font-bold flex items-center gap-1 cursor-not-allowed"
+                            title="Privilege Card Suspended: New EMI plans blocked"
+                          >
+                            <Ban className="w-3 h-3 text-amber-400" />
+                            <span>Suspended</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openAddDues(c)}
+                            className="px-2 py-0.5 rounded bg-akr-gold/15 text-akr-gold hover:bg-akr-gold/30 border border-akr-gold/40 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                            title="Add an EMI or Loan plan to this consumer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>+ Add EMI</span>
+                          </button>
+                        )}
                       </div>
                     </td>
 
@@ -1097,13 +1129,24 @@ export const ConsumerManagementScreen: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openAddDues(c)}
-                          className="p-1.5 rounded-lg text-akr-gold hover:text-white hover:bg-akr-gold/20 transition-colors cursor-pointer"
-                          title="Add EMI / Loan Plan"
-                        >
-                          <PlusCircle className="w-4 h-4" />
-                        </button>
+                        {c.cardStatus === 'suspended' ? (
+                          <button
+                            type="button"
+                            onClick={() => openAddDues(c)}
+                            className="p-1.5 rounded-lg text-amber-400/60 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                            title="Card Suspended: Cannot assign EMI"
+                          >
+                            <Ban className="w-4 h-4 text-amber-400" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => openAddDues(c)}
+                            className="p-1.5 rounded-lg text-akr-gold hover:text-white hover:bg-akr-gold/20 transition-colors cursor-pointer"
+                            title="Add EMI / Loan Plan"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openView(c)}
                           className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
@@ -1146,7 +1189,14 @@ export const ConsumerManagementScreen: React.FC = () => {
                       {c.name.charAt(0)}
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white">{c.name}</h4>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-bold text-white">{c.name}</h4>
+                        {c.cardStatus === 'suspended' && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            Suspended
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[10px] font-mono text-akr-gold font-semibold">{c.accountNumber}</span>
                         <button
@@ -1259,13 +1309,20 @@ export const ConsumerManagementScreen: React.FC = () => {
                 <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
                   <span className="text-[11px] text-zinc-400 font-mono">{c.mobile}</span>
                   <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => openAddDues(c)}
-                      className="px-2.5 py-1 rounded bg-akr-gold/15 text-akr-gold text-xs font-bold flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      Add EMI
-                    </button>
+                    {c.cardStatus === 'suspended' ? (
+                      <span className="px-2 py-1 rounded bg-zinc-800 border border-zinc-700 text-amber-400 text-xs font-bold flex items-center gap-1">
+                        <Ban className="w-3 h-3 text-amber-400" />
+                        Suspended
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => openAddDues(c)}
+                        className="px-2.5 py-1 rounded bg-akr-gold/15 text-akr-gold text-xs font-bold flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add EMI
+                      </button>
+                    )}
                     <button
                       onClick={() => openView(c)}
                       className="px-2.5 py-1 rounded bg-zinc-800 text-zinc-200 text-xs font-semibold"
@@ -1464,6 +1521,19 @@ export const ConsumerManagementScreen: React.FC = () => {
 
               return (
                 <div className="space-y-3">
+                  {/* Card Suspended Enforcement Banner */}
+                  {targetConsumerForDues.cardStatus === 'suspended' && (
+                    <div className="p-3.5 rounded-xl bg-amber-950/70 border-2 border-amber-500/70 text-amber-200 text-xs space-y-1 shadow-lg">
+                      <div className="flex items-center gap-2">
+                        <Ban className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                        <h5 className="font-bold text-white text-sm">Privilege Card Currently Suspended</h5>
+                      </div>
+                      <p className="text-amber-200/90 text-[11px] leading-relaxed">
+                        This customer's Privilege Card has been suspended by store administration. Creating or assigning new EMI plans is <strong>completely blocked</strong> until the card is reactivated under "Privilege Card Requests".
+                      </p>
+                    </div>
+                  )}
+
                   {/* Account Header with Limit Metrics */}
                   <div className="p-3.5 rounded-xl bg-gradient-to-b from-[#18181C] to-[#121215] border border-zinc-800 space-y-3">
                     <div className="flex items-center justify-between text-xs">
@@ -1988,15 +2058,18 @@ export const ConsumerManagementScreen: React.FC = () => {
               const availableCredit = Math.max(0, consumerCreditLimit - adjustedOutstanding);
               const principalNum = Number(duesPrincipal) || 0;
               const isLimitExceeded = principalNum > availableCredit;
+              const isSuspended = !editingDuesPlan && targetConsumerForDues.cardStatus === 'suspended';
 
               return (
                 <div className="pt-2">
                   <GoldButton
                     type="submit"
-                    disabled={isLimitExceeded || duesForm.formState.isSubmitting}
+                    disabled={isLimitExceeded || isSuspended || duesForm.formState.isSubmitting}
                     isLoading={duesForm.formState.isSubmitting}
                   >
-                    {isLimitExceeded
+                    {isSuspended
+                      ? 'Cannot Assign — Privilege Card Suspended'
+                      : isLimitExceeded
                       ? `Cannot Assign — Exceeds Credit Limit (${formatCurrency(availableCredit)} Available)`
                       : editingDuesPlan
                       ? 'Save & Update EMI Plan'

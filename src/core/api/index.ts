@@ -18,6 +18,7 @@ import {
   PaymentMode,
   DueStatus,
   CardRequest,
+  CardRequestStatus,
   GoogleCheckResponse,
   RegisteredUser,
 } from '../types';
@@ -458,7 +459,7 @@ export const adminApi = {
 
   updateCardRequestStatus: (
     id: string,
-    data: { status: 'approved' | 'rejected'; remarks?: string; creditLimit?: number }
+    data: { status: CardRequestStatus; remarks?: string; creditLimit?: number }
   ) =>
     request<CardRequest>(`/admin/card-requests/${id}/status`, {
       method: 'PUT',

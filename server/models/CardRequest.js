@@ -16,7 +16,7 @@ const cardRequestSchema = new mongoose.Schema(
     panDocName: { type: String },
     panDocData: { type: String },
     monthlyIncome: { type: Number },
-    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'approved', 'rejected', 'suspended'], default: 'pending' },
     creditLimitApproved: { type: Number },
     adminRemarks: { type: String },
   },

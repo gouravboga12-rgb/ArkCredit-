@@ -265,9 +265,16 @@ export const DuesManagementScreen: React.FC = () => {
       setPlanFormError(null);
       const principal = Number(data.principal) || 0;
 
-      // Real-time credit limit enforcement
+      // Real-time card suspension & credit limit enforcement
       const targetConsumer = consumers.find((c) => c.id === modalConsumerId);
       if (targetConsumer) {
+        if (!editingPlan && targetConsumer.cardStatus === 'suspended') {
+          setPlanFormError(
+            `Customer Privilege Card is currently SUSPENDED! New EMI plans cannot be assigned to ${targetConsumer.name} while their card is suspended. Please reactivate their card under Privilege Card Requests before proceeding.`
+          );
+          return;
+        }
+
         const consumerLimit = Number(targetConsumer.creditLimit) || 0;
         const currentOutstanding = Number(targetConsumer.totalOutstanding) || 0;
         const adjustedOutstanding = editingPlan
