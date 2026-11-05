@@ -26,6 +26,8 @@ import {
   RefreshCw,
   Ban,
   ShieldAlert,
+  Sliders,
+  Edit3,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { CardRequest, CardRequestStatus } from '../../../core/types';
@@ -51,14 +53,17 @@ export const CardRequestsScreen: React.FC = () => {
   const [rejectingRequest, setRejectingRequest] = useState<CardRequest | null>(null);
   const [suspendingRequest, setSuspendingRequest] = useState<CardRequest | null>(null);
   const [reactivatingRequest, setReactivatingRequest] = useState<CardRequest | null>(null);
+  const [editingLimitRequest, setEditingLimitRequest] = useState<CardRequest | null>(null);
   const [previewDocUrl, setPreviewDocUrl] = useState<{ name: string; url: string } | null>(null);
 
-  // Approval / Suspend / Reactivate Forms
+  // Approval / Suspend / Reactivate / Edit Limit Forms
   const [creditLimit, setCreditLimit] = useState<number>(50000);
   const [adminRemarks, setAdminRemarks] = useState<string>('');
   const [suspendReason, setSuspendReason] = useState<string>('');
   const [reactivateLimit, setReactivateLimit] = useState<number>(50000);
   const [reactivateRemarks, setReactivateRemarks] = useState<string>('');
+  const [editLimitValue, setEditLimitValue] = useState<number>(50000);
+  const [editLimitRemarks, setEditLimitRemarks] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Feedback Toast
@@ -233,6 +238,45 @@ export const CardRequestsScreen: React.FC = () => {
       await loadRequests();
     } catch (err: any) {
       alert(err.message || 'Error reactivating card');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSaveCardLimit = async () => {
+    if (!editingLimitRequest) return;
+    try {
+      setIsProcessing(true);
+      await adminApi.updateCardRequestCreditLimit(editingLimitRequest.id, {
+        creditLimit: editLimitValue,
+        remarks: editLimitRemarks.trim() || `Card limit updated to ₹${editLimitValue.toLocaleString('en-IN')}`,
+      });
+
+      setRequests((prev) =>
+        prev.map((item) =>
+          item.id === editingLimitRequest.id
+            ? { ...item, creditLimitApproved: editLimitValue }
+            : item
+        )
+      );
+
+      window.dispatchEvent(
+        new CustomEvent('akr_limit_updated', {
+          detail: { requestId: editingLimitRequest.id, creditLimit: editLimitValue },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('akr_consumer_realtime_update', {
+          detail: { creditLimit: editLimitValue },
+        })
+      );
+
+      showToast(`Credit limit updated to ₹${editLimitValue.toLocaleString('en-IN')} for ${editingLimitRequest.fullName}!`);
+      setEditingLimitRequest(null);
+      setEditLimitRemarks('');
+      await loadRequests();
+    } catch (err: any) {
+      alert(err.message || 'Error updating card limit');
     } finally {
       setIsProcessing(false);
     }
@@ -671,11 +715,25 @@ export const CardRequestsScreen: React.FC = () => {
                               <CheckCircle className="w-3 h-3" />
                               <span>Approved</span>
                             </span>
-                            {r.creditLimitApproved && (
-                              <span className="block text-[10px] text-zinc-400 mt-0.5 font-mono">
-                                Limit: {formatCurrency(r.creditLimitApproved)}
-                              </span>
-                            )}
+                            {r.creditLimitApproved ? (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span className="text-[10px] text-zinc-400 font-mono">
+                                  Limit: {formatCurrency(r.creditLimitApproved)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingLimitRequest(r);
+                                    setEditLimitValue(r.creditLimitApproved || 50000);
+                                    setEditLimitRemarks('');
+                                  }}
+                                  className="text-[10px] text-akr-gold hover:text-amber-300 font-semibold underline underline-offset-2 transition-colors cursor-pointer"
+                                  title="Edit Card Limit"
+                                >
+                                  (Edit)
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         )}
                         {isSuspended && (
@@ -684,6 +742,23 @@ export const CardRequestsScreen: React.FC = () => {
                               <Ban className="w-3 h-3 text-amber-400" />
                               <span>Suspended</span>
                             </span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[10px] text-zinc-400 font-mono">
+                                Limit: {formatCurrency(r.creditLimitApproved || 50000)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingLimitRequest(r);
+                                  setEditLimitValue(r.creditLimitApproved || 50000);
+                                  setEditLimitRemarks('');
+                                }}
+                                className="text-[10px] text-akr-gold hover:text-amber-300 font-semibold underline underline-offset-2 transition-colors cursor-pointer"
+                                title="Edit Card Limit"
+                              >
+                                (Edit)
+                              </button>
+                            </div>
                             <span className="block text-[10px] text-zinc-500 mt-0.5 font-mono">
                               New EMIs blocked
                             </span>
@@ -709,6 +784,22 @@ export const CardRequestsScreen: React.FC = () => {
                             <Eye className="w-3.5 h-3.5" />
                             <span>View</span>
                           </button>
+
+                          {(isApproved || isSuspended) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLimitRequest(r);
+                                setEditLimitValue(r.creditLimitApproved || 50000);
+                                setEditLimitRemarks('');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-akr-gold/40 text-akr-gold hover:text-amber-300 text-xs font-semibold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                              title="Edit Card Limit (Increase or Decrease Dynamically)"
+                            >
+                              <Sliders className="w-3.5 h-3.5 text-akr-gold" />
+                              <span>Edit Limit</span>
+                            </button>
+                          )}
 
                           {isApproved && (
                             <button
@@ -900,6 +991,22 @@ export const CardRequestsScreen: React.FC = () => {
                       <Eye className="w-3.5 h-3.5" />
                       <span>Details</span>
                     </button>
+
+                    {(isApproved || isSuspended) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingLimitRequest(r);
+                          setEditLimitValue(r.creditLimitApproved || 50000);
+                          setEditLimitRemarks('');
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-akr-gold/40 text-akr-gold text-xs font-semibold flex items-center gap-1 shadow-sm"
+                        title="Edit Card Limit"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-akr-gold" />
+                        <span>Limit</span>
+                      </button>
+                    )}
 
                     {isApproved && (
                       <button
@@ -1383,6 +1490,201 @@ export const CardRequestsScreen: React.FC = () => {
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>{isProcessing ? 'Reactivating...' : 'Confirm Reactivate Card'}</span>
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Dynamic Edit Card Limit Modal */}
+      {editingLimitRequest && (
+        <Modal
+          isOpen={!!editingLimitRequest}
+          onClose={() => setEditingLimitRequest(null)}
+          title={`Edit Card Limit: ${editingLimitRequest.fullName}`}
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-left text-xs">
+            {/* Customer Details Banner */}
+            <div className="p-3.5 rounded-xl bg-[#141418] border border-akr-gold/30 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-akr-gold font-bold text-xs">
+                  {editingLimitRequest.referenceNumber}
+                </span>
+                <span className="text-[10px] uppercase font-bold text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+                  {editingLimitRequest.cardTypeName}
+                </span>
+              </div>
+              <h4 className="font-bold text-white text-sm">{editingLimitRequest.fullName}</h4>
+              <p className="text-[11px] text-zinc-400">
+                Contact: <span className="font-mono text-zinc-200">{editingLimitRequest.phone}</span> • Current Approved Limit:{' '}
+                <strong className="text-white font-mono">
+                  ₹{(editingLimitRequest.creditLimitApproved || 50000).toLocaleString('en-IN')}
+                </strong>
+              </p>
+            </div>
+
+            {/* Dynamic Credit Limit Value Input & Live Comparison */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-zinc-400 uppercase">
+                  New Credit Limit (₹) *
+                </label>
+                {(() => {
+                  const current = editingLimitRequest.creditLimitApproved || 50000;
+                  const delta = editLimitValue - current;
+                  if (delta > 0) {
+                    const pct = Math.round((delta / current) * 100);
+                    return (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                        ▲ +₹{delta.toLocaleString('en-IN')} (+{pct}%) Limit Increase
+                      </span>
+                    );
+                  } else if (delta < 0) {
+                    const pct = Math.round((Math.abs(delta) / current) * 100);
+                    return (
+                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                        ▼ -₹{Math.abs(delta).toLocaleString('en-IN')} (-{pct}%) Limit Decrease
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      No Change
+                    </span>
+                  );
+                })()}
+              </div>
+
+              <div className="relative">
+                <IndianRupee className="w-4 h-4 text-akr-gold absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="number"
+                  value={editLimitValue}
+                  onChange={(e) => setEditLimitValue(Math.max(1000, Number(e.target.value) || 0))}
+                  min={1000}
+                  step={1000}
+                  className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-akr-gold font-mono font-bold"
+                  placeholder="50000"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Quick Adjustments */}
+            <div>
+              <span className="block text-[10px] text-zinc-500 uppercase font-semibold mb-1.5">
+                Quick Adjustments (Increase / Decrease Dynamically)
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Decrements */}
+                <button
+                  type="button"
+                  onClick={() => setEditLimitValue((v) => Math.max(5000, v - 25000))}
+                  className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                >
+                  -₹25,000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditLimitValue((v) => Math.max(5000, v - 10000))}
+                  className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                >
+                  -₹10,000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditLimitValue((v) => Math.max(5000, v - 5000))}
+                  className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                >
+                  -₹5,000
+                </button>
+
+                {/* Increments */}
+                <button
+                  type="button"
+                  onClick={() => setEditLimitValue((v) => v + 5000)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                >
+                  +₹5,000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditLimitValue((v) => v + 10000)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                >
+                  +₹10,000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditLimitValue((v) => v + 25000)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                >
+                  +₹25,000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditLimitValue((v) => v + 50000)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                >
+                  +₹50,000
+                </button>
+              </div>
+            </div>
+
+            {/* Standard Limit Presets */}
+            <div>
+              <span className="block text-[10px] text-zinc-500 uppercase font-semibold mb-1.5">
+                Standard Limit Presets
+              </span>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                {[25000, 50000, 75000, 100000, 150000, 200000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setEditLimitValue(preset)}
+                    className={`py-1 px-2 rounded-lg text-[11px] font-mono font-bold transition-all border cursor-pointer ${
+                      editLimitValue === preset
+                        ? 'bg-akr-gold text-black border-akr-gold shadow-sm'
+                        : 'bg-zinc-800/80 text-zinc-300 border-zinc-700/80 hover:bg-zinc-700'
+                    }`}
+                  >
+                    ₹{(preset / 1000).toFixed(0)}k
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Audit Remarks */}
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
+                Admin Audit Remarks (Optional)
+              </label>
+              <textarea
+                value={editLimitRemarks}
+                onChange={(e) => setEditLimitRemarks(e.target.value)}
+                rows={2}
+                placeholder="e.g. Card limit updated based on customer request and verified repayment track record."
+                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setEditingLimitRequest(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold cursor-pointer hover:bg-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCardLimit}
+                disabled={isProcessing}
+                className="px-4 py-2 rounded-xl bg-akr-gold hover:bg-amber-400 text-black font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>{isProcessing ? 'Saving Limit...' : 'Save & Update Limit'}</span>
               </button>
             </div>
           </div>

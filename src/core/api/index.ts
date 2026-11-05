@@ -371,6 +371,19 @@ export const adminApi = {
       body: JSON.stringify(data),
     }, 'admin'),
 
+  sendOverdueAlert: (
+    planId: string,
+    data: { title: string; message: string }
+  ) =>
+    request<{ success: boolean; notification: AppNotification }>(
+      `/admin/plans/${planId}/send-overdue-alert`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      'admin'
+    ),
+
   bulkUploadDues: (rows: any[]) =>
     request<{ successCount: number; errors: string[] }>('/admin/dues/bulk', {
       method: 'POST',
@@ -465,6 +478,19 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }, 'admin'),
+
+  updateCardRequestCreditLimit: (
+    id: string,
+    data: { creditLimit: number; remarks?: string }
+  ) =>
+    request<{ success: boolean; cardRequest: CardRequest; creditLimit: number }>(
+      `/admin/card-requests/${id}/credit-limit`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+      'admin'
+    ),
 
   // Registered Users Directory & Card Invitations
   getRegisteredUsers: () => request<RegisteredUser[]>('/admin/users', {}, 'admin'),

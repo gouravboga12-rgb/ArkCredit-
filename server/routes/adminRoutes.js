@@ -374,6 +374,46 @@ router.post(['/plans/:id/overdue', '/dues/:id/overdue'], async (req, res) => {
   }
 });
 
+// Send Overdue Alert & Repayment Reminder to Consumer Account
+router.post(['/plans/:id/send-overdue-alert', '/dues/:id/send-overdue-alert'], async (req, res) => {
+  try {
+    const plan = await DuesPlan.findOne({ id: req.params.id });
+    if (!plan) return res.status(404).json({ error: 'Dues plan not found.' });
+
+    const consumer = await Consumer.findOne({ id: plan.consumerId });
+    if (!consumer) return res.status(404).json({ error: 'Customer not found.' });
+
+    const { title, message } = req.body;
+    const notifId = `notif_${Date.now().toString(36)}`;
+
+    const newNotif = await AppNotification.create({
+      id: notifId,
+      consumerId: consumer.id,
+      title: title || `⚠️ Overdue Payment Alert: ${plan.title}`,
+      message:
+        message ||
+        `Dear ${consumer.name}, your payment for "${plan.title}" (Ref: ${plan.referenceNumber}) is currently overdue. Please pay on time and clear all pending overdues to avoid card suspension.`,
+      type: 'emi_reminder',
+      read: false,
+    });
+
+    emitNotification(consumer.id, newNotif);
+
+    await logActivity(
+      'Admin',
+      'SEND_OVERDUE_ALERT',
+      consumer.id,
+      consumer.name,
+      plan.referenceNumber,
+      `Alert sent: ${title || plan.title}`
+    );
+
+    return res.status(201).json({ success: true, notification: newNotif });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Bulk Upload Dues
 router.post('/dues/bulk', async (req, res) => {
   try {
@@ -707,6 +747,70 @@ router.put('/card-requests/:id/status', async (req, res) => {
   }
 });
 
+router.put('/card-requests/:id/credit-limit', async (req, res) => {
+  try {
+    const { creditLimit, remarks } = req.body;
+    const limitNum = Number(creditLimit);
+    if (!limitNum || isNaN(limitNum) || limitNum <= 0) {
+      return res.status(400).json({ error: 'Valid credit limit greater than ₹0 is required.' });
+    }
+
+    const currentReq = await CardRequest.findOne({ id: req.params.id });
+    if (!currentReq) {
+      return res.status(404).json({ error: 'Card request not found.' });
+    }
+
+    const oldLimit = currentReq.creditLimitApproved || 50000;
+    const updated = await CardRequest.findOneAndUpdate(
+      { id: req.params.id },
+      {
+        $set: {
+          creditLimitApproved: limitNum,
+          adminRemarks: remarks || `Credit limit updated from ₹${oldLimit.toLocaleString('en-IN')} to ₹${limitNum.toLocaleString('en-IN')}`,
+        },
+      },
+      { new: true }
+    );
+
+    // Update matching consumer
+    const consumerFilter = updated.consumerId
+      ? { id: updated.consumerId }
+      : { $or: [{ mobile: updated.phone }, { email: updated.email }] };
+
+    await Consumer.updateOne(consumerFilter, {
+      $set: { creditLimit: limitNum },
+    });
+
+    const matchedConsumer = await Consumer.findOne(consumerFilter);
+    if (matchedConsumer) {
+      emitConsumerUpdated(matchedConsumer);
+
+      const notif = await AppNotification.create({
+        id: `notif_${Date.now().toString(36)}`,
+        consumerId: matchedConsumer.id,
+        title: 'Privilege Card Limit Updated',
+        message: `Your AKR EMI Privilege Card credit limit has been adjusted to ₹${limitNum.toLocaleString('en-IN')} (previously ₹${oldLimit.toLocaleString('en-IN')}). Your new available borrowing capacity is now live.`,
+        type: 'balance_update',
+        read: false,
+      });
+      emitNotification(matchedConsumer.id, notif);
+    }
+
+    await logActivity(
+      'Admin',
+      'CARD_LIMIT_ADJUSTED',
+      updated.consumerId || 'new',
+      updated.fullName,
+      `₹${oldLimit}`,
+      `₹${limitNum}`
+    );
+
+    return res.json({ success: true, cardRequest: updated, creditLimit: limitNum });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 11. Activity Logs
 router.get('/activity-log', async (req, res) => {
   try {
@@ -738,6 +842,13 @@ router.post('/notifications', async (req, res) => {
       type: req.body.type || 'general',
       read: false,
     });
+
+    if (newNotif.consumerId) {
+      emitNotification(newNotif.consumerId, newNotif);
+    } else {
+      emitNotification(null, newNotif);
+    }
+
     return res.status(201).json(newNotif);
   } catch (err) {
     return res.status(500).json({ error: err.message });

@@ -27,6 +27,7 @@ import {
   X,
   BookOpen,
   Receipt,
+  BellRing,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
 import { useStore } from '../../../store';
@@ -66,6 +67,14 @@ export const DuesManagementScreen: React.FC = () => {
   const [overdueRemarks, setOverdueRemarks] = useState<string>('Payment past due date. Late fee applied.');
   const [isSavingOverdue, setIsSavingOverdue] = useState<boolean>(false);
   const [overdueToast, setOverdueToast] = useState<string | null>(null);
+
+  // Overdue Alert Modal State
+  const [alertTargetPlan, setAlertTargetPlan] = useState<DuesPlan | null>(null);
+  const [alertTargetConsumer, setAlertTargetConsumer] = useState<Consumer | null>(null);
+  const [alertOverdueInfo, setAlertOverdueInfo] = useState<any | null>(null);
+  const [alertTitle, setAlertTitle] = useState<string>('');
+  const [alertMessage, setAlertMessage] = useState<string>('');
+  const [isSendingAlert, setIsSendingAlert] = useState<boolean>(false);
 
   const [selectedConsumerId, setSelectedConsumerId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -640,6 +649,46 @@ export const DuesManagementScreen: React.FC = () => {
     }
   };
 
+  const openOverdueAlertModal = (plan: DuesPlan, consumer?: Consumer, overdueInfo?: any) => {
+    const c = consumer || consumers.find((item) => item.id === plan.consumerId);
+    const info = overdueInfo || calculatePlanOverdue(plan);
+    setAlertTargetPlan(plan);
+    setAlertTargetConsumer(c || null);
+    setAlertOverdueInfo(info);
+
+    const weeks = info?.missedWeeks || 1;
+    const days = info?.daysOverdue || 0;
+    const payable = info?.mandatoryOverduePayable || (plan.emiAmount * weeks + (plan.overdueAmount || 0));
+    const custName = c?.name || 'Customer';
+
+    setAlertTitle(`⚠️ Overdue Payment Alert: ${weeks} Week(s) Missed (${plan.title})`);
+    setAlertMessage(
+      `Dear ${custName}, your payment for "${plan.title}" (Ref: ${plan.referenceNumber}) is currently ${days} days past due with ${weeks} missed weekly installment(s). The total mandatory overdue payable is ₹${payable.toLocaleString('en-IN')}. Please pay on time and clear all ${weeks} overdue installment(s) immediately to maintain active status and avoid privilege card suspension.`
+    );
+  };
+
+  const handleSendOverdueAlert = async () => {
+    if (!alertTargetPlan) return;
+    try {
+      setIsSendingAlert(true);
+      await adminApi.sendOverdueAlert(alertTargetPlan.id, {
+        title: alertTitle.trim() || `⚠️ Overdue Payment Alert: ${alertTargetPlan.title}`,
+        message: alertMessage.trim(),
+      });
+
+      setOverdueToast(
+        `Overdue repayment alert successfully delivered to ${alertTargetConsumer?.name || 'customer'}!`
+      );
+      setAlertTargetPlan(null);
+      setAlertTargetConsumer(null);
+      setTimeout(() => setOverdueToast(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to send overdue alert');
+    } finally {
+      setIsSendingAlert(false);
+    }
+  };
+
   // Filter plans
   const filteredPlans = (activeTab === 'overdue' ? overduePlans : plans).filter((p) => {
     if (selectedConsumerId !== 'all' && p.consumerId !== selectedConsumerId) {
@@ -978,6 +1027,19 @@ export const DuesManagementScreen: React.FC = () => {
 
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Send Overdue Alert Button - Directly to left of Ledger as circled in screenshot */}
+                            {isOverdue && (
+                              <button
+                                type="button"
+                                onClick={() => openOverdueAlertModal(p, consumer, overdueInfo)}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-300 hover:bg-amber-500 hover:text-black border border-amber-500/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                                title={`Send Overdue Alert to ${consumer?.name || 'Customer'}`}
+                              >
+                                <BellRing className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Send Alert</span>
+                              </button>
+                            )}
+
                             {/* Ledger Button */}
                             <button
                               onClick={() => openPlanLedger(p)}
@@ -1089,6 +1151,20 @@ export const DuesManagementScreen: React.FC = () => {
 
                   {/* Action Controls */}
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                    {calculatePlanOverdue(p).isOverdue && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const overdueInfo = calculatePlanOverdue(p);
+                          openOverdueAlertModal(p, consumer, overdueInfo);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 hover:bg-amber-500 hover:text-black border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Send Overdue & Payment Reminder Alert"
+                      >
+                        <BellRing className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Send Alert</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => openPlanLedger(p)}
                       className="px-3 py-1.5 rounded-lg bg-[#1E1B13] border border-akr-gold/40 text-akr-gold hover:bg-akr-gold hover:text-black text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -2198,6 +2274,212 @@ export const DuesManagementScreen: React.FC = () => {
                     className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs cursor-pointer"
                   >
                     Close Ledger
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
+      )}
+
+      {/* Send Overdue Repayment Alert Modal */}
+      {alertTargetPlan && (
+        <Modal
+          isOpen={!!alertTargetPlan}
+          onClose={() => {
+            setAlertTargetPlan(null);
+            setAlertTargetConsumer(null);
+            setAlertOverdueInfo(null);
+          }}
+          title={`Send Overdue Repayment Alert: ${alertTargetPlan.title}`}
+          maxWidth="md"
+        >
+          {(() => {
+            const plan = alertTargetPlan;
+            const consumer = alertTargetConsumer;
+            const info = alertOverdueInfo || calculatePlanOverdue(plan);
+            const weeks = info?.missedWeeks || 1;
+            const days = info?.daysOverdue || 0;
+            const emiAmount = plan.emiAmount || 0;
+            const emiOverdueTotal = info?.overdueEmiTotal || emiAmount * weeks;
+            const lateFee = Number(plan.overdueAmount) || 0;
+            const totalMandatory = info?.mandatoryOverduePayable || emiOverdueTotal + lateFee;
+            const custName = consumer?.name || 'Customer';
+
+            const applyTemplate = (type: 'reminder' | 'suspension' | 'final') => {
+              if (type === 'reminder') {
+                setAlertTitle(`⚠️ Overdue Notice: ${weeks} Week(s) Missed (${plan.title})`);
+                setAlertMessage(
+                  `Dear ${custName}, this is a payment reminder from AKR Credit Capital that ${weeks} weekly installment(s) on "${plan.title}" (Ref: ${plan.referenceNumber}) are currently ${days} days overdue. Total mandatory overdue payable is ₹${totalMandatory.toLocaleString('en-IN')}. Please pay on time and clear all pending overdues to maintain active status and avoid late penalty escalation.`
+                );
+              } else if (type === 'suspension') {
+                setAlertTitle(`🚫 Immediate Action: Card Suspension Warning (${plan.title})`);
+                setAlertMessage(
+                  `URGENT NOTICE: Dear ${custName}, you have ${weeks} overdue weekly installment(s) for "${plan.title}" totaling ₹${totalMandatory.toLocaleString('en-IN')}. Please clear all pending overdues immediately. Non-payment will result in immediate suspension of your AKR EMI Privilege Card and restriction of credit services.`
+                );
+              } else {
+                setAlertTitle(`🔴 Strict Final Demand: Clear Overdues Now (${plan.referenceNumber})`);
+                setAlertMessage(
+                  `FINAL NOTICE: Payment for "${plan.title}" (${plan.referenceNumber}) is ${days} days past due (${weeks} missed week(s)). Total mandatory overdue payable: ₹${totalMandatory.toLocaleString('en-IN')} (including penalty fees). Please clear this immediately via your AKR portal to avoid account suspension and legal collection proceedings.`
+                );
+              }
+            };
+
+            return (
+              <div className="space-y-4 text-left text-xs">
+                {/* Consumer & Plan Header Card */}
+                <div className="p-3.5 rounded-xl bg-[#141418] border border-amber-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-akr-gold font-bold text-xs">
+                      {plan.referenceNumber}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-red-400 bg-red-500/15 border border-red-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                      <Clock className="w-3 h-3 text-red-400" />
+                      {weeks} {weeks === 1 ? 'Week' : 'Weeks'} Missed ({days}d past due)
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-white text-sm">{custName}</h4>
+                    <p className="text-[11px] text-zinc-400">
+                      Account: <span className="font-mono text-zinc-200">{consumer?.accountNumber || '—'}</span> • Mobile:{' '}
+                      <span className="font-mono text-zinc-200">{consumer?.mobile || '—'}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Overdue Calculation Breakdown Card */}
+                <div className="p-3.5 rounded-xl bg-[#18181D] border border-zinc-800 space-y-2.5">
+                  <div className="text-[11px] uppercase font-bold text-zinc-400 tracking-wider flex items-center justify-between">
+                    <span>Overdue Financial Breakdown</span>
+                    <span className="text-amber-400 font-mono text-[10px]">Strict No Discounts</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">
+                        Overdue EMIs ({weeks} Wks)
+                      </span>
+                      <span className="font-bold font-mono text-white text-sm">
+                        ₹{emiOverdueTotal.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 block mt-0.5 font-mono">
+                        {weeks} × ₹{emiAmount.toLocaleString('en-IN')}/wk
+                      </span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                      <span className="text-[10px] text-zinc-500 uppercase block font-semibold">
+                        Late Penalty Fee
+                      </span>
+                      <span className="font-bold font-mono text-red-400 text-sm">
+                        +₹{lateFee.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 block mt-0.5 font-mono">
+                        Mandatory Late Levy
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">
+                      Total Mandatory Overdue Payable:
+                    </span>
+                    <span className="text-base font-extrabold font-mono text-akr-gold">
+                      ₹{totalMandatory.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick Reminder Templates */}
+                <div>
+                  <span className="block text-[10px] text-zinc-400 uppercase font-bold mb-1.5">
+                    Quick Notification Templates
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate('reminder')}
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] font-semibold text-center transition-colors cursor-pointer"
+                    >
+                      💬 Standard Reminder
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate('suspension')}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/60 text-[11px] font-semibold text-center transition-colors cursor-pointer"
+                    >
+                      ⚠️ Suspension Warning
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate('final')}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/60 text-[11px] font-semibold text-center transition-colors cursor-pointer"
+                    >
+                      🔴 Final Notice
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editable Alert Title */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
+                    Alert Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={alertTitle}
+                    onChange={(e) => setAlertTitle(e.target.value)}
+                    className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl px-3 py-2 text-xs outline-none focus:border-akr-gold font-semibold"
+                    placeholder="Alert Title"
+                    required
+                  />
+                </div>
+
+                {/* Editable Alert Message */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
+                    Alert Message (Delivered to User Notification Bell & Activity) *
+                  </label>
+                  <textarea
+                    value={alertMessage}
+                    onChange={(e) => setAlertMessage(e.target.value)}
+                    rows={4}
+                    className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold resize-none leading-relaxed"
+                    placeholder="Enter message for the customer..."
+                    required
+                  />
+                </div>
+
+                {/* WebSocket Realtime Notification Delivery Note */}
+                <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-600/40 text-emerald-300 text-[11px] flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+                  <span>
+                    Sending this alert instantly pushes a live in-app notification to {custName}'s account and records an audit log.
+                  </span>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAlertTargetPlan(null);
+                      setAlertTargetConsumer(null);
+                      setAlertOverdueInfo(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold cursor-pointer hover:bg-zinc-700 text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendOverdueAlert}
+                    disabled={isSendingAlert || !alertTitle.trim() || !alertMessage.trim()}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-md text-xs active:scale-95"
+                  >
+                    <BellRing className="w-3.5 h-3.5 text-black" />
+                    <span>{isSendingAlert ? 'Sending Alert...' : 'Send Alert to User Account'}</span>
                   </button>
                 </div>
               </div>
