@@ -28,15 +28,20 @@ import {
   ShieldAlert,
   Sliders,
   Edit3,
+  AlertTriangle,
+  Info,
+  Lock,
 } from 'lucide-react';
 import { adminApi } from '../../../core/api';
-import { CardRequest, CardRequestStatus } from '../../../core/types';
+import { CardRequest, CardRequestStatus, Consumer, DuesPlan } from '../../../core/types';
 import { formatCurrency, formatDateTimeIST, formatDateOnlyIST } from '../../../core/formatters';
 import { useStore } from '../../../store';
 import { Modal, StatusBadge, GoldButton, Skeleton } from '../../../components/ui';
 
 export const CardRequestsScreen: React.FC = () => {
   const [requests, setRequests] = useState<CardRequest[]>([]);
+  const [consumers, setConsumers] = useState<Consumer[]>([]);
+  const [duesPlans, setDuesPlans] = useState<DuesPlan[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,12 +84,14 @@ export const CardRequestsScreen: React.FC = () => {
   const loadRequests = async (showSpinner = false) => {
     try {
       if (showSpinner) setLoading(true);
-      const data = await adminApi.getCardRequests();
-      if (Array.isArray(data)) {
-        setRequests(data);
-      } else {
-        setRequests([]);
-      }
+      const [reqData, consumersData, plansData] = await Promise.all([
+        adminApi.getCardRequests().catch(() => []),
+        adminApi.getConsumers().catch(() => []),
+        adminApi.getDuesPlans().catch(() => []),
+      ]);
+      setRequests(Array.isArray(reqData) ? reqData : []);
+      setConsumers(Array.isArray(consumersData) ? consumersData : []);
+      setDuesPlans(Array.isArray(plansData) ? plansData : []);
     } catch (err) {
       console.error('Failed to load card requests', err);
       setRequests([]);
@@ -245,6 +252,29 @@ export const CardRequestsScreen: React.FC = () => {
 
   const handleSaveCardLimit = async () => {
     if (!editingLimitRequest) return;
+
+    // Detect customer active debt before saving
+    const targetConsumer = consumers.find(
+      (c) =>
+        (editingLimitRequest.consumerId && c.id === editingLimitRequest.consumerId) ||
+        c.mobile === editingLimitRequest.phone ||
+        (editingLimitRequest.email && c.email?.toLowerCase() === editingLimitRequest.email.toLowerCase())
+    );
+    const consumerId = targetConsumer?.id || editingLimitRequest.consumerId;
+    const consumerActivePlans = duesPlans.filter(
+      (p) => p.consumerId === consumerId && p.status === 'active'
+    );
+    const totalOutstanding = consumerActivePlans.length > 0
+      ? consumerActivePlans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0)
+      : (targetConsumer?.totalOutstanding ?? editingLimitRequest.consumerOutstanding ?? 0);
+
+    if (totalOutstanding > 0 && editLimitValue < totalOutstanding) {
+      alert(
+        `Cannot reduce card limit to ₹${editLimitValue.toLocaleString('en-IN')}! The customer currently has ₹${totalOutstanding.toLocaleString('en-IN')} in active utilized EMI debt (${consumerActivePlans.length || 1} plan(s)) that still must be paid. Minimum allowable limit is ₹${totalOutstanding.toLocaleString('en-IN')}.`
+      );
+      return;
+    }
+
     try {
       setIsProcessing(true);
       await adminApi.updateCardRequestCreditLimit(editingLimitRequest.id, {
@@ -1496,200 +1526,383 @@ export const CardRequestsScreen: React.FC = () => {
         </Modal>
       )}
 
-      {/* Dynamic Edit Card Limit Modal */}
-      {editingLimitRequest && (
-        <Modal
-          isOpen={!!editingLimitRequest}
-          onClose={() => setEditingLimitRequest(null)}
-          title={`Edit Card Limit: ${editingLimitRequest.fullName}`}
-          maxWidth="md"
-        >
-          <div className="space-y-4 text-left text-xs">
-            {/* Customer Details Banner */}
-            <div className="p-3.5 rounded-xl bg-[#141418] border border-akr-gold/30 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-akr-gold font-bold text-xs">
-                  {editingLimitRequest.referenceNumber}
-                </span>
-                <span className="text-[10px] uppercase font-bold text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
-                  {editingLimitRequest.cardTypeName}
-                </span>
-              </div>
-              <h4 className="font-bold text-white text-sm">{editingLimitRequest.fullName}</h4>
-              <p className="text-[11px] text-zinc-400">
-                Contact: <span className="font-mono text-zinc-200">{editingLimitRequest.phone}</span> • Current Approved Limit:{' '}
-                <strong className="text-white font-mono">
-                  ₹{(editingLimitRequest.creditLimitApproved || 50000).toLocaleString('en-IN')}
-                </strong>
-              </p>
-            </div>
+      {/* Dynamic Edit Card Limit Modal with Active Debt Detection & Limit Reduction Guard */}
+      {editingLimitRequest && (() => {
+        // Find matching consumer & active plans
+        const targetConsumer = consumers.find(
+          (c) =>
+            (editingLimitRequest.consumerId && c.id === editingLimitRequest.consumerId) ||
+            c.mobile === editingLimitRequest.phone ||
+            (editingLimitRequest.email && c.email?.toLowerCase() === editingLimitRequest.email.toLowerCase())
+        );
 
-            {/* Dynamic Credit Limit Value Input & Live Comparison */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-zinc-400 uppercase">
-                  New Credit Limit (₹) *
-                </label>
-                {(() => {
-                  const current = editingLimitRequest.creditLimitApproved || 50000;
-                  const delta = editLimitValue - current;
-                  if (delta > 0) {
-                    const pct = Math.round((delta / current) * 100);
-                    return (
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
-                        ▲ +₹{delta.toLocaleString('en-IN')} (+{pct}%) Limit Increase
-                      </span>
-                    );
-                  } else if (delta < 0) {
-                    const pct = Math.round((Math.abs(delta) / current) * 100);
-                    return (
-                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
-                        ▼ -₹{Math.abs(delta).toLocaleString('en-IN')} (-{pct}%) Limit Decrease
-                      </span>
-                    );
-                  }
-                  return (
-                    <span className="text-[10px] text-zinc-500 font-mono">
-                      No Change
+        const consumerId = targetConsumer?.id || editingLimitRequest.consumerId;
+        const consumerActivePlans = duesPlans.filter(
+          (p) => p.consumerId === consumerId && p.status === 'active'
+        );
+
+        const totalOutstanding = consumerActivePlans.length > 0
+          ? consumerActivePlans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0)
+          : (targetConsumer?.totalOutstanding ?? editingLimitRequest.consumerOutstanding ?? 0);
+
+        const activePlansCount = consumerActivePlans.length > 0
+          ? consumerActivePlans.length
+          : (targetConsumer?.activePlansCount ?? editingLimitRequest.activePlansCount ?? 0);
+
+        const currentLimit = editingLimitRequest.creditLimitApproved || 50000;
+        const delta = editLimitValue - currentLimit;
+        const isReducing = delta < 0;
+        const isBelowOutstanding = totalOutstanding > 0 && editLimitValue < totalOutstanding;
+        const minAllowedLimit = totalOutstanding;
+        const maxReducibleAmount = Math.max(0, currentLimit - totalOutstanding);
+        const remainingCapacityAfterReduction = Math.max(0, editLimitValue - totalOutstanding);
+
+        return (
+          <Modal
+            isOpen={!!editingLimitRequest}
+            onClose={() => setEditingLimitRequest(null)}
+            title={`Edit Card Limit: ${editingLimitRequest.fullName}`}
+            maxWidth="md"
+          >
+            <div className="space-y-4 text-left text-xs">
+              {/* Customer Details Banner */}
+              <div className="p-3.5 rounded-xl bg-[#141418] border border-akr-gold/30 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-akr-gold font-bold text-xs">
+                    {editingLimitRequest.referenceNumber}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+                    {editingLimitRequest.cardTypeName}
+                  </span>
+                </div>
+                <h4 className="font-bold text-white text-sm">{editingLimitRequest.fullName}</h4>
+                <p className="text-[11px] text-zinc-400">
+                  Contact: <span className="font-mono text-zinc-200">{editingLimitRequest.phone}</span> • Current Approved Limit:{' '}
+                  <strong className="text-white font-mono">
+                    ₹{currentLimit.toLocaleString('en-IN')}
+                  </strong>
+                </p>
+              </div>
+
+              {/* Debt Utilization & Minimum Limit Card */}
+              <div className="p-3 rounded-xl bg-[#18181D] border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5 text-akr-gold" />
+                    <span>Card Utilization & Active Debt to be Paid</span>
+                  </span>
+                  {totalOutstanding > 0 ? (
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold">
+                      {activePlansCount} Active EMI Plan{activePlansCount === 1 ? '' : 's'}
                     </span>
-                  );
-                })()}
+                  ) : (
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                      0 Active Dues
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase block font-semibold">
+                      Current Limit
+                    </span>
+                    <span className="font-mono font-bold text-white text-xs block mt-0.5">
+                      ₹{currentLimit.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-zinc-900 border border-amber-500/40">
+                    <span className="text-[10px] text-amber-400 uppercase block font-semibold">
+                      Still Must Pay
+                    </span>
+                    <span className="font-mono font-bold text-amber-300 text-xs block mt-0.5">
+                      ₹{totalOutstanding.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase block font-semibold">
+                      Max Reducible
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400 text-xs block mt-0.5">
+                      ₹{maxReducibleAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                {totalOutstanding > 0 && (
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-zinc-800/80">
+                    <span className="text-zinc-400 font-medium">Strict Minimum Limit Allowed:</span>
+                    <span className="font-mono font-bold text-akr-gold">
+                      ₹{minAllowedLimit.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="relative">
-                <IndianRupee className="w-4 h-4 text-akr-gold absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="number"
-                  value={editLimitValue}
-                  onChange={(e) => setEditLimitValue(Math.max(1000, Number(e.target.value) || 0))}
-                  min={1000}
-                  step={1000}
-                  className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-akr-gold font-mono font-bold"
-                  placeholder="50000"
-                  required
+              {/* Dynamic Detection Alert / Awareness Banners */}
+              {isBelowOutstanding ? (
+                <div className="p-3.5 rounded-xl bg-red-950/50 border border-red-500/80 text-red-200 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 animate-bounce" />
+                    <span className="font-extrabold text-sm text-red-300">
+                      CANNOT REDUCE LIMIT BELOW ACTIVE OUTSTANDING!
+                    </span>
+                  </div>
+                  <p className="text-xs text-red-200/90 leading-relaxed">
+                    This customer currently has <strong className="text-white font-mono font-bold">₹{totalOutstanding.toLocaleString('en-IN')}</strong> that still must be paid across <strong className="text-white font-mono">{activePlansCount} active EMI plan{activePlansCount === 1 ? '' : 's'}</strong> on this privilege card.
+                  </p>
+                  <p className="text-[11px] text-red-300 font-semibold">
+                    You <span className="underline uppercase">cannot reduce</span> the card limit below what the customer has already used. The minimum allowable limit is <strong className="text-white font-mono">₹{minAllowedLimit.toLocaleString('en-IN')}</strong>.
+                  </p>
+                  <div className="pt-1 flex items-center justify-between">
+                    <span className="text-[10px] text-zinc-400">Quick Fix:</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditLimitValue(minAllowedLimit)}
+                      className="px-2.5 py-1 rounded-lg bg-red-800 hover:bg-red-700 text-white font-bold text-[11px] font-mono cursor-pointer transition-colors shadow-sm active:scale-95"
+                    >
+                      Set to Min Allowable: ₹{minAllowedLimit.toLocaleString('en-IN')}
+                    </button>
+                  </div>
+                </div>
+              ) : isReducing ? (
+                <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/60 text-amber-200 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <span className="font-bold text-xs text-amber-300">
+                      LIMIT REDUCTION DETECTED (-₹{Math.abs(delta).toLocaleString('en-IN')} / -{Math.round((Math.abs(delta) / currentLimit) * 100)}%)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    You are reducing this card limit from <span className="font-mono text-zinc-200">₹{currentLimit.toLocaleString('en-IN')}</span> to <strong className="font-mono text-white">₹{editLimitValue.toLocaleString('en-IN')}</strong>.
+                    Customer still owes <span className="font-mono text-amber-300 font-semibold">₹{totalOutstanding.toLocaleString('en-IN')}</span> across active EMIs.
+                  </p>
+                  <p className="text-[11px] text-emerald-400 font-medium">
+                    ✓ Safe reduction: New limit exceeds active debt. Customer retains <span className="font-mono font-bold">₹{remainingCapacityAfterReduction.toLocaleString('en-IN')}</span> in borrowing headroom.
+                  </p>
+                </div>
+              ) : delta > 0 ? (
+                <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/40 text-emerald-300 text-[11px] flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>
+                    Limit increase (+₹{delta.toLocaleString('en-IN')} / +{Math.round((delta / currentLimit) * 100)}%). Customer's borrowing capacity expands to ₹{editLimitValue.toLocaleString('en-IN')}.
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Dynamic Credit Limit Value Input & Live Comparison */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-zinc-400 uppercase">
+                    New Credit Limit (₹) *
+                  </label>
+                  {(() => {
+                    if (delta > 0) {
+                      const pct = Math.round((delta / currentLimit) * 100);
+                      return (
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                          ▲ +₹{delta.toLocaleString('en-IN')} (+{pct}%) Limit Increase
+                        </span>
+                      );
+                    } else if (delta < 0) {
+                      const pct = Math.round((Math.abs(delta) / currentLimit) * 100);
+                      return (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 font-mono border ${
+                          isBelowOutstanding
+                            ? 'text-red-400 bg-red-500/15 border-red-500/40'
+                            : 'text-amber-400 bg-amber-500/15 border-amber-500/30'
+                        }`}>
+                          ▼ -₹{Math.abs(delta).toLocaleString('en-IN')} (-{pct}%) Limit Decrease
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        No Change
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                <div className="relative">
+                  <IndianRupee className="w-4 h-4 text-akr-gold absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="number"
+                    value={editLimitValue}
+                    onChange={(e) => setEditLimitValue(Math.max(1000, Number(e.target.value) || 0))}
+                    min={minAllowedLimit || 1000}
+                    step={1000}
+                    className={`w-full bg-[#18181B] border rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none font-mono font-bold transition-colors ${
+                      isBelowOutstanding
+                        ? 'border-red-500 text-red-300 focus:border-red-400'
+                        : 'border-zinc-700 text-white focus:border-akr-gold'
+                    }`}
+                    placeholder="50000"
+                    required
+                  />
+                </div>
+                {isBelowOutstanding && (
+                  <span className="block text-[11px] text-red-400 mt-1 font-semibold">
+                    * Limit cannot be lower than ₹{minAllowedLimit.toLocaleString('en-IN')} (Customer's active EMI debt).
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Adjustments */}
+              <div>
+                <span className="block text-[10px] text-zinc-500 uppercase font-semibold mb-1.5">
+                  Quick Adjustments (Increase / Decrease Dynamically)
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {/* Decrements */}
+                  {[25000, 10000, 5000].map((amt) => {
+                    const wouldBe = editLimitValue - amt;
+                    const isBlocked = totalOutstanding > 0 && wouldBe < totalOutstanding;
+                    return (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => {
+                          if (!isBlocked) {
+                            setEditLimitValue(wouldBe);
+                          }
+                        }}
+                        disabled={isBlocked}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold transition-all border ${
+                          isBlocked
+                            ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50 line-through'
+                            : 'bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 cursor-pointer'
+                        }`}
+                        title={
+                          isBlocked
+                            ? `Cannot reduce below active debt of ₹${totalOutstanding.toLocaleString('en-IN')}`
+                            : `Decrease by ₹${amt.toLocaleString('en-IN')}`
+                        }
+                      >
+                        -₹{amt.toLocaleString('en-IN')}
+                      </button>
+                    );
+                  })}
+
+                  {/* Increments */}
+                  <button
+                    type="button"
+                    onClick={() => setEditLimitValue((v) => v + 5000)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                  >
+                    +₹5,000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditLimitValue((v) => v + 10000)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                  >
+                    +₹10,000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditLimitValue((v) => v + 25000)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                  >
+                    +₹25,000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditLimitValue((v) => v + 50000)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                  >
+                    +₹50,000
+                  </button>
+                </div>
+              </div>
+
+              {/* Standard Limit Presets */}
+              <div>
+                <span className="block text-[10px] text-zinc-500 uppercase font-semibold mb-1.5">
+                  Standard Limit Presets
+                </span>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  {[25000, 50000, 75000, 100000, 150000, 200000].map((preset) => {
+                    const isBelow = totalOutstanding > 0 && preset < totalOutstanding;
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          if (!isBelow) {
+                            setEditLimitValue(preset);
+                          }
+                        }}
+                        disabled={isBelow}
+                        className={`py-1 px-2 rounded-lg text-[11px] font-mono font-bold transition-all border flex items-center justify-center gap-1 ${
+                          editLimitValue === preset
+                            ? 'bg-akr-gold text-black border-akr-gold shadow-sm'
+                            : isBelow
+                            ? 'bg-zinc-900/60 text-zinc-600 border-zinc-800/80 cursor-not-allowed line-through opacity-50'
+                            : 'bg-zinc-800/80 text-zinc-300 border-zinc-700/80 hover:bg-zinc-700 cursor-pointer'
+                        }`}
+                        title={
+                          isBelow
+                            ? `Locked: Below customer debt of ₹${totalOutstanding.toLocaleString('en-IN')}`
+                            : `Set limit to ₹${(preset / 1000).toFixed(0)}k`
+                        }
+                      >
+                        {isBelow && <Lock className="w-2.5 h-2.5 text-zinc-600" />}
+                        <span>₹{(preset / 1000).toFixed(0)}k</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Audit Remarks */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
+                  Admin Audit Remarks (Optional)
+                </label>
+                <textarea
+                  value={editLimitRemarks}
+                  onChange={(e) => setEditLimitRemarks(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Card limit updated based on customer request and verified repayment track record."
+                  className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold resize-none"
                 />
               </div>
-            </div>
 
-            {/* Quick Adjustments */}
-            <div>
-              <span className="block text-[10px] text-zinc-500 uppercase font-semibold mb-1.5">
-                Quick Adjustments (Increase / Decrease Dynamically)
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* Decrements */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
                 <button
                   type="button"
-                  onClick={() => setEditLimitValue((v) => Math.max(5000, v - 25000))}
-                  className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                  onClick={() => setEditingLimitRequest(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold cursor-pointer hover:bg-zinc-700"
                 >
-                  -₹25,000
+                  Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditLimitValue((v) => Math.max(5000, v - 10000))}
-                  className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
+                  onClick={handleSaveCardLimit}
+                  disabled={isProcessing || isBelowOutstanding}
+                  className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-md ${
+                    isBelowOutstanding
+                      ? 'bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed opacity-60'
+                      : 'bg-akr-gold hover:bg-amber-400 text-black cursor-pointer active:scale-95'
+                  }`}
                 >
-                  -₹10,000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditLimitValue((v) => Math.max(5000, v - 5000))}
-                  className="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
-                >
-                  -₹5,000
-                </button>
-
-                {/* Increments */}
-                <button
-                  type="button"
-                  onClick={() => setEditLimitValue((v) => v + 5000)}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
-                >
-                  +₹5,000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditLimitValue((v) => v + 10000)}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
-                >
-                  +₹10,000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditLimitValue((v) => v + 25000)}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
-                >
-                  +₹25,000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditLimitValue((v) => v + 50000)}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/50 text-emerald-300 text-[11px] font-mono font-semibold transition-colors cursor-pointer"
-                >
-                  +₹50,000
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>
+                    {isProcessing
+                      ? 'Saving Limit...'
+                      : isBelowOutstanding
+                      ? `Cannot Reduce Below Debt (₹${minAllowedLimit.toLocaleString('en-IN')})`
+                      : 'Save & Update Limit'}
+                  </span>
                 </button>
               </div>
             </div>
-
-            {/* Standard Limit Presets */}
-            <div>
-              <span className="block text-[10px] text-zinc-500 uppercase font-semibold mb-1.5">
-                Standard Limit Presets
-              </span>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                {[25000, 50000, 75000, 100000, 150000, 200000].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setEditLimitValue(preset)}
-                    className={`py-1 px-2 rounded-lg text-[11px] font-mono font-bold transition-all border cursor-pointer ${
-                      editLimitValue === preset
-                        ? 'bg-akr-gold text-black border-akr-gold shadow-sm'
-                        : 'bg-zinc-800/80 text-zinc-300 border-zinc-700/80 hover:bg-zinc-700'
-                    }`}
-                  >
-                    ₹{(preset / 1000).toFixed(0)}k
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Audit Remarks */}
-            <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1">
-                Admin Audit Remarks (Optional)
-              </label>
-              <textarea
-                value={editLimitRemarks}
-                onChange={(e) => setEditLimitRemarks(e.target.value)}
-                rows={2}
-                placeholder="e.g. Card limit updated based on customer request and verified repayment track record."
-                className="w-full bg-[#18181B] border border-zinc-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-akr-gold resize-none"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-              <button
-                type="button"
-                onClick={() => setEditingLimitRequest(null)}
-                className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 font-semibold cursor-pointer hover:bg-zinc-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveCardLimit}
-                disabled={isProcessing}
-                className="px-4 py-2 rounded-xl bg-akr-gold hover:bg-amber-400 text-black font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-md"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>{isProcessing ? 'Saving Limit...' : 'Save & Update Limit'}</span>
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
 
       {/* Document Preview Modal */}
       {previewDocUrl && (

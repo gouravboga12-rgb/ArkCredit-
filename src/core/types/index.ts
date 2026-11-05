@@ -244,6 +244,10 @@ export interface CardRequest {
   status: CardRequestStatus;
   adminRemarks?: string;
   creditLimitApproved?: number;
+  consumerOutstanding?: number;
+  activePlansCount?: number;
+  matchedConsumerName?: string;
+  matchedConsumerAccountNumber?: string;
   createdAt: string; // ISO string
   updatedAt: string;
 }

@@ -642,8 +642,37 @@ router.delete('/cards/:id', async (req, res) => {
 // 10. Card Requests
 router.get('/card-requests', async (req, res) => {
   try {
-    const requests = await CardRequest.find().sort({ createdAt: -1 });
-    return res.json(requests);
+    const [requests, consumers, activePlans] = await Promise.all([
+      CardRequest.find().sort({ createdAt: -1 }),
+      Consumer.find(),
+      DuesPlan.find({ status: 'active' }),
+    ]);
+
+    const result = requests.map((r) => {
+      const rObj = r.toObject ? r.toObject() : { ...r };
+      const matchedConsumer = consumers.find(
+        (c) =>
+          (rObj.consumerId && c.id === rObj.consumerId) ||
+          (rObj.phone && c.mobile === rObj.phone) ||
+          (rObj.email && c.email && c.email.toLowerCase() === rObj.email.toLowerCase())
+      );
+
+      const consumerId = matchedConsumer?.id || rObj.consumerId;
+      const consumerPlans = activePlans.filter((p) => p.consumerId === consumerId);
+      const totalOutstanding = consumerPlans.reduce((acc, p) => acc + (p.outstandingAmount || 0), 0);
+      const activePlansCount = consumerPlans.length;
+
+      return {
+        ...rObj,
+        consumerId: consumerId || rObj.consumerId,
+        consumerOutstanding: totalOutstanding,
+        activePlansCount,
+        matchedConsumerName: matchedConsumer?.name || rObj.fullName,
+        matchedConsumerAccountNumber: matchedConsumer?.accountNumber,
+      };
+    });
+
+    return res.json(result);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -760,6 +789,29 @@ router.put('/card-requests/:id/credit-limit', async (req, res) => {
       return res.status(404).json({ error: 'Card request not found.' });
     }
 
+    // Match consumer
+    const consumerFilter = currentReq.consumerId
+      ? { id: currentReq.consumerId }
+      : { $or: [{ mobile: currentReq.phone }, { email: currentReq.email }] };
+
+    const matchedConsumer = await Consumer.findOne(consumerFilter);
+    const consumerId = matchedConsumer?.id || currentReq.consumerId;
+
+    // Detect how much still should be paid across active EMI plans and prevent reducing below that
+    if (consumerId) {
+      const activePlans = await DuesPlan.find({ consumerId, status: 'active' });
+      const currentOutstanding = activePlans.reduce((sum, p) => sum + (p.outstandingAmount || 0), 0);
+
+      if (limitNum < currentOutstanding) {
+        return res.status(400).json({
+          error: `Cannot reduce card limit to ₹${limitNum.toLocaleString('en-IN')}. The customer currently has ₹${currentOutstanding.toLocaleString('en-IN')} in active utilized EMI debt (${activePlans.length} active plan${activePlans.length === 1 ? '' : 's'}) that still must be paid. The minimum allowable limit is ₹${currentOutstanding.toLocaleString('en-IN')}.`,
+          currentOutstanding,
+          activePlansCount: activePlans.length,
+          minAllowedLimit: currentOutstanding,
+        });
+      }
+    }
+
     const oldLimit = currentReq.creditLimitApproved || 50000;
     const updated = await CardRequest.findOneAndUpdate(
       { id: req.params.id },
@@ -773,27 +825,25 @@ router.put('/card-requests/:id/credit-limit', async (req, res) => {
     );
 
     // Update matching consumer
-    const consumerFilter = updated.consumerId
-      ? { id: updated.consumerId }
-      : { $or: [{ mobile: updated.phone }, { email: updated.email }] };
-
-    await Consumer.updateOne(consumerFilter, {
-      $set: { creditLimit: limitNum },
-    });
-
-    const matchedConsumer = await Consumer.findOne(consumerFilter);
-    if (matchedConsumer) {
-      emitConsumerUpdated(matchedConsumer);
-
-      const notif = await AppNotification.create({
-        id: `notif_${Date.now().toString(36)}`,
-        consumerId: matchedConsumer.id,
-        title: 'Privilege Card Limit Updated',
-        message: `Your AKR EMI Privilege Card credit limit has been adjusted to ₹${limitNum.toLocaleString('en-IN')} (previously ₹${oldLimit.toLocaleString('en-IN')}). Your new available borrowing capacity is now live.`,
-        type: 'balance_update',
-        read: false,
+    if (consumerId) {
+      await Consumer.updateOne({ id: consumerId }, {
+        $set: { creditLimit: limitNum },
       });
-      emitNotification(matchedConsumer.id, notif);
+
+      const updatedConsumer = await Consumer.findOne({ id: consumerId });
+      if (updatedConsumer) {
+        emitConsumerUpdated(updatedConsumer);
+
+        const notif = await AppNotification.create({
+          id: `notif_${Date.now().toString(36)}`,
+          consumerId: updatedConsumer.id,
+          title: 'Privilege Card Limit Updated',
+          message: `Your AKR EMI Privilege Card credit limit has been adjusted to ₹${limitNum.toLocaleString('en-IN')} (previously ₹${oldLimit.toLocaleString('en-IN')}). Your new available borrowing capacity is now live.`,
+          type: 'balance_update',
+          read: false,
+        });
+        emitNotification(updatedConsumer.id, notif);
+      }
     }
 
     await logActivity(
