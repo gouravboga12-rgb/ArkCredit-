@@ -81,13 +81,14 @@ async function verifyGooglePayload({ credential, accessToken }) {
 // Auth helper middleware
 function getConsumerId(req) {
   const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) return null;
-  const token = auth.slice(7).trim();
-  // Token format: "jwt-token-{consumerId}"
-  if (token.startsWith('jwt-token-')) {
-    return token.replace('jwt-token-', '');
+  if (auth && auth.startsWith('Bearer ')) {
+    const token = auth.slice(7).trim();
+    if (token.startsWith('jwt-token-')) {
+      return token.replace('jwt-token-', '');
+    }
+    if (token) return token;
   }
-  return token;
+  return req.headers['x-consumer-id'] || req.query?.consumerId || req.body?.consumerId || null;
 }
 
 // 1. Consumer Login
@@ -1202,6 +1203,33 @@ router.put('/notifications/read-all', async (req, res) => {
   const consumerId = getConsumerId(req);
   await AppNotification.updateMany({ $or: [{ consumerId: null }, { consumerId }] }, { $set: { read: true } });
   return res.json({ success: true });
+});
+
+// Clear all notifications for the consumer
+router.delete('/notifications/clear-all', async (req, res) => {
+  try {
+    const consumerId = getConsumerId(req);
+    const filter = consumerId ? { $or: [{ consumerId: null }, { consumerId }] } : {};
+    const result = await AppNotification.deleteMany(filter);
+    return res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete individual notification by ID
+router.delete('/notifications/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const mongoose = require('mongoose');
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
+    const result = await AppNotification.deleteOne({
+      $or: [{ id }, ...(isObjectId ? [{ _id: id }] : [])]
+    });
+    return res.json({ success: true, deletedCount: result.deletedCount, id });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

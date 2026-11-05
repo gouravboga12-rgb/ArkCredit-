@@ -293,6 +293,16 @@ export const consumerApi = {
     request<{ success: boolean }>('/consumer/notifications/read-all', {
       method: 'PUT',
     }, 'consumer'),
+
+  deleteNotification: (id: string) =>
+    request<{ success: boolean; id?: string }>(`/consumer/notifications/${id}`, {
+      method: 'DELETE',
+    }, 'consumer'),
+
+  clearAllNotifications: () =>
+    request<{ success: boolean; deletedCount?: number }>('/consumer/notifications/clear-all', {
+      method: 'DELETE',
+    }, 'consumer'),
 };
 
 // ==========================================

@@ -134,6 +134,8 @@ interface StoreState {
   ) => AppNotification;
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: (consumerId: string) => void;
+  deleteNotification: (id: string) => void;
+  clearAllNotifications: (consumerId?: string) => void;
 
   // Activity Log
   logActivity: (entry: Omit<ActivityLog, 'id' | 'createdAt'>) => void;
@@ -958,6 +960,20 @@ export const useStore = create<StoreState>()(
           notifications: state.notifications.map((n) =>
             n.consumerId === consumerId || n.consumerId === null ? { ...n, read: true } : n
           ),
+        }));
+      },
+
+      deleteNotification: (id) => {
+        set((state) => ({
+          notifications: state.notifications.filter((n) => n.id !== id),
+        }));
+      },
+
+      clearAllNotifications: (consumerId) => {
+        set((state) => ({
+          notifications: consumerId
+            ? state.notifications.filter((n) => n.consumerId !== consumerId && n.consumerId !== null)
+            : [],
         }));
       },
 

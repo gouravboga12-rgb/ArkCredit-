@@ -1,21 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, Calendar, CreditCard, ShieldAlert, Sparkles } from 'lucide-react';
+import { Bell, CheckCheck, Calendar, CreditCard, ShieldAlert, Sparkles, Trash2 } from 'lucide-react';
 import { consumerApi } from '../../core/api';
 import { AppNotification } from '../../core/types';
 import { formatDisplayDate } from '../../core/formatters';
 import { PageHeader, BottomNav, Skeleton, EmptyState } from '../../components/ui';
+import { useStore } from '../../store';
 
 export const NotificationsScreen: React.FC = () => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isClearing, setIsClearing] = useState(false);
 
   const fetchNotifs = async () => {
     try {
       setLoading(true);
       const data = await consumerApi.getNotifications();
-      setNotifications(data);
+      setNotifications(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load notifications', err);
     } finally {
@@ -31,8 +33,41 @@ export const NotificationsScreen: React.FC = () => {
     try {
       await consumerApi.markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      window.dispatchEvent(new CustomEvent('akr_notif_realtime_update'));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (notifications.length === 0) return;
+    if (!window.confirm('Are you sure you want to clear all notifications?')) {
+      return;
+    }
+    try {
+      setIsClearing(true);
+      await consumerApi.clearAllNotifications();
+      setNotifications([]);
+      useStore.getState().clearAllNotifications?.();
+      window.dispatchEvent(new CustomEvent('akr_notif_realtime_update'));
+    } catch (err: any) {
+      console.error('Failed to clear notifications', err);
+      alert(err.message || 'Failed to clear all notifications');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
+  const handleDeleteItem = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      useStore.getState().deleteNotification?.(id);
+      window.dispatchEvent(new CustomEvent('akr_notif_realtime_update'));
+      await consumerApi.deleteNotification(id);
+    } catch (err) {
+      console.error('Failed to delete notification', err);
+      fetchNotifs();
     }
   };
 
@@ -42,6 +77,7 @@ export const NotificationsScreen: React.FC = () => {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
       );
+      window.dispatchEvent(new CustomEvent('akr_notif_realtime_update'));
     }
   };
 
@@ -69,15 +105,34 @@ export const NotificationsScreen: React.FC = () => {
           title="Notifications"
           onBack={() => navigate(-1)}
           rightAction={
-            unreadCount > 0 ? (
-              <button
-                type="button"
-                onClick={handleMarkAllRead}
-                className="flex items-center gap-1 text-xs text-akr-gold font-medium hover:underline"
-              >
-                <CheckCheck className="w-3.5 h-3.5" />
-                <span>Mark all read</span>
-              </button>
+            notifications.length > 0 ? (
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  disabled={unreadCount === 0}
+                  className={`flex items-center gap-1 text-xs font-medium transition-colors ${
+                    unreadCount > 0
+                      ? 'text-akr-gold hover:underline cursor-pointer'
+                      : 'text-zinc-500 opacity-60 cursor-not-allowed'
+                  }`}
+                  title={unreadCount > 0 ? 'Mark all notifications as read' : 'All notifications marked as read'}
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span>Mark all read</span>
+                </button>
+                <span className="text-zinc-600 text-xs select-none">•</span>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  disabled={isClearing}
+                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium hover:underline cursor-pointer transition-colors disabled:opacity-50"
+                  title="Clear all notifications"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isClearing ? 'Clearing...' : 'Clear all'}</span>
+                </button>
+              </div>
             ) : null
           }
         />
@@ -117,9 +172,20 @@ export const NotificationsScreen: React.FC = () => {
                       >
                         {notif.title}
                       </h4>
-                      {!notif.read && (
-                        <span className="w-2 h-2 rounded-full bg-akr-gold flex-shrink-0" />
-                      )}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {!notif.read && (
+                          <span className="w-2 h-2 rounded-full bg-akr-gold flex-shrink-0" />
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteItem(e, notif.id)}
+                          className="p-1.5 -mr-1 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 active:scale-95 transition-all cursor-pointer"
+                          title="Delete notification"
+                          aria-label="Delete notification"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <p className="text-xs text-akr-text-muted mt-1 leading-relaxed">
                       {notif.message}
